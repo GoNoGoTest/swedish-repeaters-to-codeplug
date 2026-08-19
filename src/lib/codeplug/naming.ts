@@ -118,9 +118,41 @@ export function buildName(
 }
 
 /**
+ * Suffixsekvens: 1, 2, 3… eller A, B, … Z, AA, AB … (bijektiv bas-26) så att
+ * sekvensen aldrig tar slut och alltid är deterministisk.
+ */
+function suffixFor(policy: NamingSettings["collisionPolicy"], attempt: number): string {
+  if (policy === "numeric_suffix") return String(attempt);
+  let n = attempt;
+  let out = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out || "A";
+}
+
+/**
+ * Bygger ett kandidatnamn som alltid får plats inom `max` tecken.
+ * När suffixet ensamt är minst lika långt som `max` behåller vi suffixets
+ * svans — det är enda sättet att få unika namn vid t.ex. maxLength=1.
+ */
+function candidateName(base: string, suffix: string, max: number): string {
+  if (!Number.isFinite(max)) return base + suffix;
+  if (suffix.length >= max) return suffix.slice(suffix.length - max);
+  return base.slice(0, max - suffix.length) + suffix;
+}
+
+/**
  * Pure: returns a new `channels` array with `collided` and
  * `generated_name_final` updated for any colliding entries. Input is not
  * mutated.
+ *
+ * Kollisioner är inte ett exportfel — de löses alltid automatiskt och
+ * deterministiskt. Om namnrymden är genuint uttömd (t.ex. maxLength=1 med
+ * fler kanaler än tillgängliga tecken) räknas kanalen som olöst och får
+ * varningen `unresolved_name_collision`; exporten stoppas inte av oss.
  */
 export function resolveCollisions(
   channels: NormalizedChannel[],
@@ -139,26 +171,6 @@ export function resolveCollisions(
     counts.set(name, (counts.get(name) ?? 0) + 1);
   }
 
-  if (n.collisionPolicy === "stop") {
-    const occ = new Map<string, number>();
-    const out = channels.map((ch) => {
-      const name = ch.generated_name_final || "NONAME";
-      const seen = occ.get(name) ?? 0;
-      occ.set(name, seen + 1);
-      if (seen >= 1) {
-        unresolved++;
-        return { ...ch, collided: true };
-      }
-      return ch;
-    });
-    return { channels: out, unresolved };
-  }
-
-  const suffixFor = (attempt: number): string =>
-    n.collisionPolicy === "numeric_suffix"
-      ? String(attempt)
-      : String.fromCharCode(64 + Math.min(26, attempt));
-
   // `taken` tracks every final name we've assigned so we don't accidentally
   // collide a suffixed name with an existing unique name.
   const taken = new Set<string>();
@@ -169,6 +181,11 @@ export function resolveCollisions(
     }
   }
 
+  // Övre gräns för antal försök: sekvensen kan bara producera ändligt många
+  // distinkta namn inom `max` tecken, så vi behöver aldrig fler försök än
+  // antalet redan tagna namn plus marginal för suffixlängdsbyten.
+  const attemptLimit = channels.length + 64;
+
   // Per-base counter — assigns 1, 2, 3… in document order to each occurrence
   // of a colliding base name.
   const perBase = new Map<string, number>();
@@ -178,21 +195,33 @@ export function resolveCollisions(
       return ch.generated_name_final === name ? ch : { ...ch, generated_name_final: name };
     }
     let attempt = (perBase.get(name) ?? 0) + 1;
-    let candidate = "";
-    let safety = 0;
-    while (true) {
-      const suffix = suffixFor(attempt);
-      const base = name.slice(0, Math.max(1, Math.min(name.length, max - suffix.length)));
-      candidate = (base + suffix).slice(0, max);
-      if (!taken.has(candidate)) break;
+    let candidate = candidateName(name, suffixFor(n.collisionPolicy, attempt), max);
+    let tries = 0;
+    while (taken.has(candidate) && tries < attemptLimit) {
       attempt++;
-      if (++safety > 200) {
-        unresolved++;
-        break;
-      }
+      tries++;
+      candidate = candidateName(name, suffixFor(n.collisionPolicy, attempt), max);
     }
     perBase.set(name, attempt);
+    const exhausted = taken.has(candidate);
     taken.add(candidate);
+    if (exhausted) {
+      unresolved++;
+      return {
+        ...ch,
+        collided: true,
+        generated_name_final: candidate,
+        warnings: ch.warnings.some((w) => w.code === "unresolved_name_collision")
+          ? ch.warnings
+          : [
+              ...ch.warnings,
+              {
+                code: "unresolved_name_collision" as const,
+                message: "Namnrymden är uttömd – kanalnamnet är inte unikt",
+              },
+            ],
+      };
+    }
     return { ...ch, collided: true, generated_name_final: candidate };
   });
   return { channels: out, unresolved };
