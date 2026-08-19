@@ -1,82 +1,123 @@
-# Flexibel kolumnhantering för SK6BA-importen
+# Gör drift-skyddet i settings.schema.ts äkta
 
-Idag kräver `loadSk6baCsv()` att alla 24 poster i `EXPECTED_COLS` finns i rubrikraden. Saknas `masl`, `magl`, `ant`, `backup`, `dir`, `watt_pep` m.fl. avvisas en fullt användbar fil. Ingen av dessa kolumner läses av `normalize()` i pipeline.ts — den rör bara `output, tx_shift, access, mode, type, status, band, district, call, city, channel, network, network_id, id, lat, lng, locator`.
+## Vad som faktiskt är fel
 
-## 1. Vad som verkligen måste vara obligatoriskt
+```ts
+export type _SettingsSchemaCompatible =
+  z.infer<typeof settingsSchema> extends Partial<Settings> ? true : true;
+```
 
-Bara **`output`** är semantiskt nödvändig. Utan RX-frekvens finns ingen kanal — allt annat kan defaultas.
+Båda grenarna är `true`, så uttrycket är en no-op. Kommentaren ovanför lovar ett skydd som inte finns. Det är hela buggen — ingen runtime-påverkan.
 
-`mode`, `type`, `status` föreslogs som required, men de är egentligen *starkt rekommenderade*, inte nödvändiga:
+Det finns dessutom en andra, viktigare sanning: **villkoret skulle ändå inte hålla om det aktiverades.** `settingsSchema` är byggt av `.passthrough()`-objekt, så `z.infer` innehåller indexsignaturer (`{ [k: string]: unknown }`) på varje nivå. En sådan typ är inte `extends Partial<Settings>` — t.ex. `naming.collisionPolicy` är rätt, men `filter.statuses` är `string[] | undefined` mot `string[]`, och passthrough-indexet gör jämförelsen ännu lösare. Byter man `: true` mot `: false` får man alltså en kompileringsfel som **inte** speglar ett verkligt fel. Det är därför den naiva varianten av kandidatfixen är farlig.
 
-- `mode` saknas → `expandModes()` ger inga kanaler. Det är ett tomt men korrekt resultat; med fallback "FM" blir filen användbar.
-- `status` / `type` saknas → farligare i praktiken, eftersom default-filtret är `statuses: ["QRV"]` och `types: ["Repeater","Link","Hotspot"]`. Alla rader får tom sträng och filtreras bort ⇒ tom förhandsvisning som ser ut som en bugg.
+## 1. Vad kandidatfixen kan råka förstöra
 
-Föreslagen indelning:
+Nuvarande `loadStoredSettings()` har en medveten kaskad av resiliens som lätt går sönder om man "städar bort casts":
 
-| Nivå | Fält | Beteende om det saknas |
+- `settingsSchema.safeParse(migrated)` är **allt-eller-inget på toppnivån**. `filter`, `naming`, `sort`, `packs`, `export` är alla obligatoriska. Saknas en av dem → hela sparade konfigurationen kastas och man faller till `DEFAULT_SETTINGS`. Det är dagens verkliga beteende och det är redan sprött; att göra fler fält obligatoriska (t.ex. i `filterSchema`, där allt idag är `.optional()`) skulle öka antalet nollställningar.
+- Slutobjektet byggs som `{ ...DEFAULT_SETTINGS, ...(data as Partial<Settings>), filter: …, naming: {…spread}, packs: {…}, sort: {…}, export: {…} }`. Den breda spreaden av `data` är det som bär över **okända toppnivåfält** från localStorage tillbaka in i state, och därmed tillbaka ut vid nästa `setItem`. Ett strikt `satisfies Settings` på ett objekt-literal skulle tvinga bort just den spreaden (eller kräva `as`), och då tappas okända fält tyst vid första inladdning.
+- `migrateNaming` returnerar avsiktligt `Record<string, unknown>` och kör **före** schemat. Poängen är att `"stop"` ska hinna bli `"numeric_suffix"` innan `z.enum` underkänner och nollställer allt. Låter man den returnera en exakt `NamingSettings`-slice måste den validera/fylla i alla fält själv — och då flyttar man reset-logiken in i migreringen istället för att undvika den.
+- `sanitizePerTarget` droppar tyst okända target-id:n (target borttagen) och ersätter ogiltig patch med `target.defaultSettings`. Att typa den som `Record<string, unknown>` → exakt typ ger inget, eftersom `perTarget` per definition är target-definierad och otypbar centralt.
+
+## 2. Behövs `.passthrough()`, och var?
+
+Ja, men inte överallt. Rollerna:
+
+| Schema | Passthrough behövs? | Varför |
 | --- | --- | --- |
-| Required | `output` | Hard fail med tydligt felmeddelande |
-| Recommended | `mode`, `status`, `type`, `tx_shift`, `access`, `band`, `district`, `call`, `city`, `channel` | Laddas ändå, med defaults + diagnostik, och filtret neutraliseras (se punkt 4) |
-| Optional | `id`, `network`, `network_id`, `lat`, `lng`, `locator`, `updated`, `masl`, `magl`, `watt_pep`, `dir`, `ant`, `backup` + okända kolumner | Tyst, bevaras som de är |
+| `settingsSchema` (topp) | **Ja** | Framtida/okända toppnivåsektioner ska överleva en nedgradering (användaren kör äldre deploy). |
+| `filterSchema` | **Ja** | Bär de deprecated fälten `districts`, `includeUnknownDistricts`, `modeStrategy`, `customModes` som migreringen läser. |
+| `namingSchema` | Ja (svagt) | `abbreviations` kan få nya kategorier. |
+| `packsSchema`, `sortSchema`, `splitSchema`, `exportSchema` | Ja (svagt) | Samma forward-compat-argument; ingen kostnad. |
 
-Motivering: hard-fail bara där vi omöjligt kan gissa. Allt annat blir en synlig varning istället för ett stopp.
+Viktigt: passthrough skyddar bara det som *passerar* schemat. Idag går ändå hela objektet förlorat om en obligatorisk sektion saknas — passthrough hjälper inte där.
 
-## 2. Manuell kolumnmappnings-UI
+## 3. Kan skärpningen orsaka reset / förlorade fält?
 
-**Skjut upp.** Den behövs bara när `output` inte kan identifieras ens via alias, vilket blir sällsynt när aliaslistan finns. Ta först alias + diagnostik; lägg till mappnings-UI först om verklig användning visar att det behövs. Felmeddelandet vid hard fail listar då de kolumner filen faktiskt har, så användaren kan döpa om själv.
+Ja, på fyra konkreta sätt om man inte är försiktig:
 
-## 3. Minsta robusta arkitektur
+1. **Legacy-reset**: gör man fler fält obligatoriska (särskilt i `filterSchema`) nollställs sparade konfigurationer som idag överlever.
+2. **Okända fält försvinner**: byter man ut `...(data as Partial<Settings>)` mot explicit fält-för-fält-konstruktion tappas passthrough-fälten. Det är en tyst regression.
+3. **Target-settings avvisas**: `t.settingsSchema` är typad `z.ZodType<TSettings>` — tar man bort `as` i `registry.ts`/`sanitizePerTarget` kan varianstrubbel tvinga fram nya, striktare parses. Att `merged` alltid är `defaults + patch` är det som räddar delvisa patchar idag; behåll det.
+4. **Partiella gamla settings**: en payload från `sk6ba-chirp-settings-v5`-eran med bara `{ filter, naming }` nollställs redan idag. Ändra inte det i samma PR — men dokumentera det.
 
-Ny fil `src/lib/codeplug/importers/sk6ba.columns.ts`:
+## 4. Minsta säkra fix
 
-- `COLUMN_CONTRACT`: kanoniskt fältnamn → `{ level: "required" | "recommended" | "optional", aliases: string[] }`.
-- `normalizeHeader(h)`: trim, lowercase, `-`/mellanslag → `_`, ta bort omgivande citattecken.
-- `resolveColumns(headers)` → `{ map: Record<rawHeader, canonicalKey>, missingRequired, missingRecommended, aliasesApplied, unknownColumns, ambiguous }`.
+Tre små steg, ingen användarsynlig förändring:
 
-Ändringar i `sk6ba.ts`:
+1. **Ta bort `_SettingsSchemaCompatible`** och den vilseledande kommentaren. En falsk garanti är sämre än ingen.
+2. **Namnge den persisterade formen** i settings.schema.ts:
+   ```ts
+   export type StoredSettings = z.infer<typeof settingsSchema>;
+   ```
+   `Settings` i models.ts förblir domänens sanning. `loadStoredSettings` blir explicit: `StoredSettings` in → `Settings` ut, och den befintliga spread-konstruktionen är just den konverteringen.
+3. **Lägg ett äkta typskydd bara där det går att göra rätt** — på unionerna, inte på hela objektet:
+   ```ts
+   type Assert<T extends true> = T;
+   type Eq<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
-- `parseSk6baCsv` använder `transformHeader` för normalisering och mappar sedan om raden till kanoniska nycklar. **Okända kolumner behålls** med sitt normaliserade namn, så `RawRow` (redan `Record<string,string>`) är oförändrad som typ.
-- `ImportResult` byter ut `missingColumns: string[]` mot `contract: ColumnContractResult` (behåll `missingColumns` som deprecated alias för required-listan så UI/tester inte bryts abrupt).
-- `loadSk6baCsv` hard-failar bara när `missingRequired.length > 0`. Övrigt går ut som `ParseWarning[]` (`source: "contract"`) i det befintliga `parseWarnings`-flödet.
+   type _Collision = Assert<Eq<
+     z.infer<typeof namingSchema>["collisionPolicy"],
+     NamingSettings["collisionPolicy"]
+   >>;
+   type _SplitMode = Assert<Eq<z.infer<typeof splitSchema>["mode"], SplitMode>>;
+   type _DupePolicy = Assert<Eq<z.infer<typeof packsSchema>["freqDupePolicy"], FreqDupePolicy>>;
+   type _RxOnly = Assert<Eq<z.infer<typeof packsSchema>["rxOnlyPolicy"], RxOnlyPolicy>>;
+   type _SortKeys = Assert<Eq<z.infer<typeof sortSchema>["keys"][number], SortSettings["keys"][number]>>;
+   ```
+   Detta är kärnan i verklig drift-risk: någon lägger till `"pack_first"` i `SortSettings["keys"]` men glömmer `z.enum`, och sparade inställningar nollställs tyst i produktion. Assertionen fångar exakt det, och den är sann idag.
 
-Ambiguitet (två headers mappar till samma kanoniska fält): första exakta träffen vinner före alias-träff; annars första kolumnen — och en varning.
+   Ännu bättre för de fyra unionerna: härled dem från delade `as const`-arrayer (t.ex. `export const COLLISION_POLICIES = ["numeric_suffix","last_char_suffix"] as const`) och låt både models.ts (`(typeof COLLISION_POLICIES)[number]`) och `z.enum(COLLISION_POLICIES)` använda samma konstant. Då blir drift omöjlig och assertionen redundant. Rekommenderas för `collisionPolicy`, `SplitMode`, `FreqDupePolicy`, `RxOnlyPolicy`, `SortSettings["keys"]`.
 
-Berörda filer: `importers/sk6ba.ts`, ny `importers/sk6ba.columns.ts`, `importers/schemas.ts` (utöka `ParseWarning["source"]`), `components/codeplug/RepeaterLoader.tsx` (visa kontraktsdiagnostik i den befintliga `ParseWarningsPanel`), `routes/index.tsx` (filter-neutralisering, se nedan). Pipeline, exportörer och naming rörs inte.
+**Uttryckligen inte i denna ändring**: `satisfies Settings` på slutobjektet (dödar passthrough-spreaden), strikta returtyper på `migrateFilter`/`migrateNaming` (flyttar reset-risk uppströms), och att göra `filterSchema`-fält obligatoriska.
 
-## 4. Defaults och filter när rekommenderade kolumner saknas
+## 5. Typassertion, sanitizer eller runtime-test?
 
-- `mode` saknas → sätt `"FM"` per rad vid normalisering av rådata, plus en varning "mode saknas, antar FM".
-- `status` saknas → hoppa över statusfiltret helt (behandla filtret som avstängt), inte "matcha tom sträng". Samma för `type`.
-- Konkret: `parseSk6baCsv` returnerar `presentFields: Set<canonicalKey>`; `filterChannels` (eller anroparen i `routes/index.tsx`) hoppar över facetter vars källkolumn saknas.
-- `RepeaterFilterPanel` bygger sina val från `summary.uniqueCounts` — dölj facetter utan källkolumn istället för att visa en ensam "(tom)"-post.
-- `band` saknas → härleds redan från frekvens av `bands.ts`; ingen åtgärd.
-- `district`/`call` saknas → `deriveRegion()` ger "unknown"; region-facetten döljs på samma sätt.
-- `lat`/`lng` saknas → avståndsfiltret stängs av (visa förklaring i UI).
+Kombination, med tydliga roller:
 
-## 5. Migration och bakåtkompatibilitet
+- **Typnivå** (`Assert<Eq<…>>` eller delade `as const`-konstanter): för enum-/unionsdrift. Billigt, exakt, fångar rätt fel vid kompilering.
+- **Runtime-test**: för det typer inte kan uttrycka — att `DEFAULT_SETTINGS` faktiskt passerar schemat, att legacy-payloads inte nollställs, att okända fält överlever. Detta är den viktigaste delen; `settings.schema.test.ts` har redan grunden.
+- **Sanitizers**: behåll som de är. De är avsiktligt löst typade eftersom de arbetar på otrodd data *före* validering.
 
-- Rena SK6BA-exporter fortsätter parsa bit-identiskt: alla kanoniska namn matchar redan exakt, inga alias appliceras, inga varningar.
-- Sparade exporter i localStorage lagrar rå CSV-text och parsas om ⇒ inget migrationssteg.
-- Sparade filterinställningar kan innehålla statusar som inte finns i en smalare fil; neutraliseringen ovan gör det ofarligt utan att skriva om användarens inställningar.
-- `missingColumns` behålls i typen (nu = enbart required) så nuvarande fel-UI och tester fortsätter fungera.
+Att försöka bevisa "schemat ⊇ Settings" på typnivå för hela objektet är inte värt det med passthrough i bilden — det ger antingen falska larm eller en assertion man tvingas urvattna tills den blir meningslös igen (exakt hur den nuvarande uppstod).
 
-## 6. Testplan
+## 6. Acceptanstester
 
-Nya/utökade tester i `src/lib/codeplug/__tests__/importers/`:
+Utöka `src/lib/codeplug/__tests__/settings.schema.test.ts` och `src/hooks/__tests__/settingsMigration.test.ts`:
 
-1. Fil utan `masl,magl,ant,backup,dir,watt_pep` → `status: "loaded"`, inga varningar av nivå error.
-2. Fil utan `output` → `status: "error"`, meddelandet listar filens faktiska kolumner.
-3. Alias: `frequency`/`rx_frequency` → `output`, `shift`/`offset` → `tx_shift`, `latitude`/`longitude` → `lat`/`lng`; verifiera att `rows[0].output` finns.
-4. Header-normalisering: `"Output "`, `"TX Shift"`, `"District"` mappar rätt.
-5. Okänd kolumn `foo` bevaras i `RawRow` och rapporteras som `unknown_column`-varning.
-6. Ambiguitet: både `output` och `frequency` finns → exakt matchning vinner + varning.
-7. Snapshot: nuvarande `sk6ba-sample.csv` ger identiska `rows` före/efter (regressionsskydd).
-8. Filter: fil utan `status`-kolumn ger icke-tom förhandsvisning trots default `statuses: ["QRV"]` (pipeline- eller komponenttest).
+1. `DEFAULT_SETTINGS` passerar `settingsSchema` (finns redan) — plus att `safeParse(DEFAULT_SETTINGS).data` deep-equals input (inga fält tappas).
+2. **Okända toppnivåfält överlever hela round-trippen**: skriv `{...DEFAULT_SETTINGS, myFutureFlag: 1}` till localStorage, kör `loadStoredSettings`, förvänta att `myFutureFlag` finns kvar i resultatet.
+3. **Okända fält i undersektion**: `filter.someFutureFacet: ["x"]` överlever.
+4. **Legacy-payload nollställs inte** — exempel att testa mot:
+   ```json
+   {
+     "filter": {
+       "statuses": ["QRV"], "types": ["Repeater"],
+       "modeStrategy": "custom", "customModes": ["fm", "System Fusion"],
+       "districts": ["6"], "includeUnknownDistricts": true,
+       "bands": ["2"], "countries": ["SE"]
+     },
+     "naming": { "components": ["{city}"], "separator": "_", "cityMaxLength": 6,
+       "transliterate": true, "uppercase": true, "collisionPolicy": "stop",
+       "abbreviations": { "type": {}, "network": {}, "band": {}, "districtPrefix": "D" } },
+     "sort": { "keys": ["district"], "geohashPrecision": 5,
+       "home_district_sort": "distance", "home_district_first": false },
+     "packs": { "placement": "off", "selection": {}, "freqDupePolicy": "keep_both",
+       "rxOnlyPolicy": "mark" },
+     "export": { "targetId": "chirp-generic",
+       "perTarget": { "chirp-generic": { "maxLength": 8 }, "removed-target": { "x": 1 } },
+       "split": { "mode": "single", "chunkSize": 32 } }
+   }
+   ```
+   Förväntat: `collisionPolicy === "numeric_suffix"`, `separator === "_"` bevarat, `filter.modes` innehåller `"FM"` och `"C4FM"`, `includeUnknownRegions === true`, `perTarget["chirp-generic"].maxLength === 8`, `perTarget["removed-target"]` borta, allt annat = defaults.
+5. **Ogiltig target-patch** (`perTarget["chirp-generic"] = { maxLength: -1 }`) → ersätts av target-defaults, övriga sektioner orörda.
+6. **Okänt `targetId`** → faller till `DEFAULT_SETTINGS.export.targetId`, resten bevarat.
+7. **Reload-idempotens**: `load → save → load` ger deep-equal resultat (fångar tysta fältförluster).
+8. **Regressionsvakt för drift** (om vi väljer runtime framför typnivå): loopa `COLLISION_POLICIES` / split-modes / dupe-policies och assertera att varje värde passerar respektive delschema.
 
-## 7. Risker och invändningar mot ursprungsförslaget
+## Risker och avvägningar
 
-- **Att göra `mode`/`type`/`status` required löser fel problem.** Det byter ett falskt "saknad kolumn"-fel mot ett annat. Det verkliga felet är att default-filtret tyst tömmer resultatet — därför är filter-neutraliseringen (punkt 4) den viktigaste delen av den här ändringen, inte kontraktet i sig.
-- **Alias kan tolka fel.** `offset` betyder shift-belopp i vissa exporter men riktning i andra. Vi mappar bara namn, aldrig värden; `parseShift()` avgör tolkningen och flaggar `unclear_shift` som förut.
-- **Tyst default `mode: "FM"`** kan producera kanaler som inte finns i verkligheten. Mildras av en synlig varning; alternativet (noll kanaler) är sämre.
-- **Diagnostikbrus**: en främmande CSV kan generera dussintals `unknown_column`-varningar. Slå ihop dem till en rad ("N okända kolumner: …") i panelen.
-- **Scope creep**: manuell mappnings-UI + kontrakt i samma steg fördubblar ytan. Därför uppdelningen ovan.
+- Att ta bort assertionen utan att ersätta den ger noll skydd — därför är punkt 3 i "minsta säkra fix" inte valfri.
+- Delade `as const`-konstanter rör models.ts, som många filer importerar; det är en mekanisk men bred diff. Alternativet (`Assert<Eq<…>>`) är noll-risk men fångar drift först när någon kör typecheck, inte vid författandet.
+- Den kvarstående verkliga svagheten är oförändrad efter denna fix: **en saknad toppnivåsektion nollställer hela konfigurationen.** Vill vi laga det är rätt åtgärd per-sektion-validering med fallback till defaults per sektion — en separat, större ändring med egen testomgång.
