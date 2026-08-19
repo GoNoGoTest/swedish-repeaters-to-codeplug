@@ -87,7 +87,11 @@ function loadStoredSettings(): Settings {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const migrated = { ...parsed, filter: migrateFilter(parsed?.filter as never) };
+    const migrated = {
+      ...parsed,
+      filter: migrateFilter(parsed?.filter as never),
+      naming: migrateNaming(parsed?.naming as never),
+    };
     const check = settingsSchema.safeParse(migrated);
     if (!check.success) {
       console.warn("Sparade inställningar ogiltiga, återställer defaults", check.error.format());
