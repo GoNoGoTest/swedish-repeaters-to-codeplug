@@ -1,97 +1,105 @@
-# Korrigerad analys: drift-skyddet i settings.schema.ts
+# Issue #5: Stegvis domänmodellrefaktor av NormalizedChannel — analys
 
-Dina invändningar är i huvudsak korrekta. Nedan är rättelserna, verifierade mot koden.
+Read-only granskning av nuvarande kod. Ingen kod ändrad.
 
-## 1. `satisfies` — rättelse
+## 1. Var skapas NormalizedChannel?
 
-Du har rätt, och min tidigare formulering slog ihop två skilda saker:
+Endast fyra ställen konstruerar en hel kanal från grunden:
 
-- **`satisfies` tar aldrig bort runtime-fält.** Det är enbart en typkontroll; objektet som byggs är exakt det spreadarna producerar. Ett `{ ...DEFAULT_SETTINGS, ...data, … } satisfies Settings` skulle bevara okända fält i runtime precis som idag.
-- **Det som faktiskt händer är att `satisfies` inte typcheckar.** `data` är `z.infer<typeof settingsSchema>` med passthrough-indexsignatur (`{ [k: string]: unknown }`). Spreadar man in den blir resultattypen inte tilldelningsbar till `Settings` — objektliteral-spread av en indexsignaturtyp gör att TS inte kan garantera att t.ex. `naming` har rätt form, och excess-property-kontrollen mot `Settings` fallerar. Man skulle alltså tvingas till fler `as`, inte färre.
+| Plats | Typ | Kommentar |
+|---|---|---|
+| `src/lib/codeplug/pipeline.ts` → `normalize()` | produktion | SK6BA-rader. Bygger objektliteral + `emptyPackFields()` + `emptyAccessFields()`, avslutas med `satisfies NormalizedChannel` |
+| `src/lib/codeplug/importers/channel_pack.ts` → `parseChannelPackCsv()` | produktion | Pack-rader, `ParsedPackChannel extends NormalizedChannel` med extra `enabled_default` |
+| `src/components/codeplug/NamingEditor.tsx` → `makeExampleChannel()` | produktion (UI-förhandsvisning) | Egen full literal — tredje kopian av "alla fält med defaults" |
+| `src/lib/codeplug/__tests__/helpers.ts` → `makeChannel()` + varianter | test | Fjärde kopian |
 
-Så: risken med `satisfies` är **kompileringsfriktion som pressar fram omskrivningar**, inte dataförlust i sig. Faran är indirekt — någon "löser" typfelet genom att sluta spreada `data`, och _då_ försvinner fälten. Min ursprungliga slutsats (undvik `satisfies` här) står, men av rätt skäl.
+Derivat skapas via spread i: `expandModes`, `applyRxOnlyPolicy`, pack-split-degradering, `applyModeAccessSubset`, `applyPostExpansionAccessWarnings`, `applyFreqDedupe`, namngivning och `resolveCollisions`.
 
-## 2. Exakt spårning av okända fält genom `loadStoredSettings`
+**Mutation:** en sökning efter fältassignment (`x.duplex =`, `.warnings =`, …) i `src/` utanför tester ger noll träffar. Pipelinen är redan helt kopierande/ren. Det finns alltså ingen mutationsdisciplin kvar att vinna — den vinsten är redan hemtagen.
 
-Verifierat rad för rad. Bilden är mer blandad än jag beskrev:
+## 2. Vilka konsumenter behöver hela typen?
 
-| Nivå                                | Mekanism                                                                                         | Bevaras?                                                                                                                                                                                 |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Toppnivå                            | `...(data as Partial<Settings>)`                                                                 | **Ja** — kräver `settingsSchema.passthrough()`                                                                                                                                           |
-| `filter`                            | `filter: migrated.filter`                                                                        | **Ja**, men **inte** tack vare `filterSchema`. `migrateFilter` spreadar `parsedFilter`, dvs. den **råa** JSON:en före validering. Schemats passthrough är irrelevant för det här fältet. |
-| `naming`                            | `{ ...DEFAULT.naming, ...(data.naming) }`                                                        | Ja — kräver `namingSchema.passthrough()`                                                                                                                                                 |
-| `packs`                             | `{ ...DEFAULT.packs, ...(data.packs) }`                                                          | Ja — kräver `packsSchema.passthrough()`                                                                                                                                                  |
-| `sort`                              | `{ ...DEFAULT.sort, ...(data.sort) }`                                                            | Ja — kräver `sortSchema.passthrough()`                                                                                                                                                   |
-| `export` (toppnivå i sektionen)     | objektet byggs om från `targetId` / `perTarget` / `split` — **`...exportPatch` spreadas aldrig** | **Nej. Okända fält direkt under `export` tappas idag.** `exportSchema.passthrough()` gör här ingen nytta.                                                                                |
-| `export.split`                      | `{ ...DEFAULT.split, ...(exportPatch.split) }`                                                   | Ja — kräver `splitSchema.passthrough()`                                                                                                                                                  |
-| `export.perTarget`, okänt target-id | `sanitizePerTarget` hoppar över                                                                  | Nej — **avsiktligt**                                                                                                                                                                     |
-| `export.perTarget[<känt id>]`       | `resolveTargetSettings`-mönstret: `defaults + patch` → `t.settingsSchema.safeParse`              | Kända fält ja; **okända fält inuti patchen strippas**, eftersom target-scheman (t.ex. `chirpSettingsSchema`) är vanliga `z.object` utan passthrough                                      |
+Smala konsumenter (läser en handfull fält, skulle idag kunna ta ett delinterface):
 
-Jag påstod tidigare att passthrough ger round-trip-bevarande generellt. Det stämmer inte: **`export`-sektionen och per-target-patcharna tappar okända fält oavsett passthrough.** Om vi skriver acceptanstester måste de spegla det verkliga beteendet, annars låser vi fast ett påstående som inte gäller.
+- `filters.ts`: `status`, `type`, `band`, `region` → `ChannelMode & Pick<ChannelLocation,…>`
+- `dedupe.ts`: `rx_frequency`, `source_type`, `warnings`
+- `sorting.ts`: `region`/`district`, `type`, `city`, `rx_frequency`, `lat`/`lng`
+- `targets/split.ts`: `region`, `pack_id`, `band`, `source_type`
+- `exporters/shared/frequency.ts`: tar redan `ChannelFrequency` — enda stället där delinterfacen faktiskt används
+- `exporters/shared/modeMap.ts`: tar redan `ChannelMode & Pick<ChannelPackMeta,"mode_pack"> & {source_type}`
+- `modes.ts` (`effectiveModeOf`): strukturell minitype
+- `PreviewTable`, `ExportPanel`, `routes/index.tsx`: läsande, breda men bara läsning
 
-## 3. Behövs `filterSchema.passthrough()`?
+Breda konsumenter som realistiskt behöver hela kanalen: `naming.buildName` (token-resolver kan slå upp nästan vilket fält som helst), samt de fyra exporttargeten och `ExportTarget`-kontraktet (`validate`/`export`/`exportMany`/`previewMode`).
 
-**Inte för migreringen.** Två skäl, båda verifierade:
+Slutsats: delinterface-parametrisering hjälper 4–5 filer och rör inte exportkontraktet. Det är en liten, äkta men begränsad vinst.
 
-1. `migrateFilter(parsed?.filter)` läser den råa JSON:en, före `safeParse`. Legacy-fälten når migreringen oberoende av schemat.
-2. Slutobjektet tar `filter: migrated.filter`, inte `data.filter`. Schemats `filter`-output används aldrig.
+## 3. Faktiskt nåbara ogiltiga kombinationer
 
-`filterSchema` listar dessutom legacy-fälten explicit (`modeStrategy`, `customModes`, `districts`, `includeUnknownDistricts`), så passthrough behövs inte ens för att släppa igenom dem — de är namngivna.
+Dessa är verifierade i koden, inte bara typmässigt representerbara:
 
-Passthrough på `filterSchema` har alltså exakt ett kvarvarande syfte: **att en okänd framtida filternyckel inte ska få hela `safeParse` att falla** (nedgraderingsscenario). Det är verkligt men svagt — och `.passthrough()` är gratis, så behåll det. Bara sluta beskriva det som migrationskritiskt.
+1. **`is_analog_fm` speglar `mode_raw`, inte `mode_effective`.** `normalize()` sätter `is_analog_fm: /\bFM\b/i.test(mode_raw)`. En SK6BA-rad `"FM / C4FM"` expanderas till två kanaler där *båda* har `is_analog_fm === true`, inklusive C4FM-kanalen. Idag räddas exporten av att VGC och Nicsure droppar digitala SK6BA-rader före `encodeBandwidth`, och att CHIRP inte läser flaggan. Fältet är alltså både felaktigt och nästan oanvänt — en fälla för nästa target (IC-705).
+2. **`duplex: "off"` kan samexistera med `tx_frequency != null`.** RX-only-policyn `block_tx` sätter `duplex: "off"` men rör inte `tx_frequency`. Delade `deriveTxMhz()` returnerar `tx_frequency` först av allt och struntar i `"off"` — den skulle alltså räkna fram en TX-frekvens för en spärrad kanal. Nuvarande target räddas av egna för-kontroller (`nicsure` kollar `rx_only` först, `vgc` sätter `tx_dis`, `chirp` hanterar `"off"` explicit). Detta är den mest konkreta reella buggrisken idag.
+3. **`duplex: "+"/"-"` med `tx_shift === null` och `offset === 0`** ger tyst simplex-TX i `deriveTxMhz` utan varning.
+4. **`ParsedPackChannel.enabled_default` följer med** genom hela pipelinen som en extra runtime-property på objekt typade som `NormalizedChannel`. Harmlöst idag, men bryter antagandet "runtime-shape == typen".
+5. Motsatt: kombinationer som **inte** längre är nåbara — analog tone på digital kanal och digital access på analog kanal — hindras av `applyModeAccessSubset` som körs på *hela* det kombinerade settet efter placement. Den invarianten är i praktiken redan enforcerad, men bara en gång, sent, och utan testat skydd mot att en ny pipeline-stage körs efter den.
 
-## 4. "v5-payload" — rättelse
+## 4. Persistens
 
-Verifierat: `STORAGE_KEY = "sk6ba-chirp-settings-v6"` är den enda nyckel koden rör, och ingenstans läses en äldre nyckel. Min formulering "en payload från v5-eran" var missvisande.
+`NormalizedChannel` persisteras inte någonstans. localStorage innehåller bara:
 
-Det verkliga legacy-scenariot är: **data som skrevs under v6-nyckeln av en äldre version av appen**, dvs. en gammal _form_ under aktuell nyckel. Det är precis vad `migrateFilter` och `migrateNaming` finns för. En äldre nyckel (v5 eller tidigare) är permanent oåtkomlig — de användarna fick redan defaults vid nyckelbytet.
+- `sk6ba:exports:v1` → färdig CSV-text (`saved-exports.ts`, zod-validerad)
+- inställningsnyckeln i `useCodeplugSettings.ts` → `Settings`, inklusive pack-selektion som listor av `source_id`
 
-Konsekvens för testerna: legacy-fixtures ska skrivas under `sk6ba-chirp-settings-v6`, inte under en påhittad gammal nyckel.
+En modellrefaktor kräver därför **ingen datamigrering**. Det tar bort ett vanligt argument mot en union — men tar också bort brådskan.
 
-## 5. A vs B
+## 5. Vad en stor discriminated union skulle kunna sabba
 
-**A har lägre risk och löser hela den konkreta smell:en.** Rekommendation: gör A nu, skippa B.
+- **Placement/kombination:** `combined = [...packValidated, ...sk6baSorted]` blir en unionslista; varje stage efter den (`applyModeAccessSubset`, dedupe, namngivning, sortering) måste narrow:a eller acceptera unionen. Nettoresultatet blir troligen `NormalizedChannel = Sk6baChannel | PackChannel` som ändå läses ostrukturerat överallt.
+- **Exporterna:** alla fyra target läser fritt mellan "pack-fält" och "sk6ba-fält" på samma objekt (`mode_pack` på SK6BA-rader är `""`, `rx_only` på SK6BA-rader är `false`). Med en union måste varje läsning av `c.mode_pack`, `c.rx_only`, `c.tx_allowed`, `c.pack_id` gate:as. Det är ~40 träffar och byte-identiska snapshots står på spel.
+- **En access-union** (analog | dmr | c4fm | …) krockar direkt med `applyModeAccessSubset`, som bygger på att alla fält finns och nollas. Den skulle behöva bytas mot en konstruktor — större ändring än den ser ut.
+- `Partial<NormalizedChannel>` i `NamingEditor` och testhelpers slutar fungera rakt av.
 
-- **A** = ta bort `_SettingsSchemaCompatible`, lägg smala `Eq`-assertions på de persisterade literal-unionerna, lägg reload-/migrationstester. Noll runtime-ändring, noll ändring i `loadStoredSettings`. Fångar exakt den drift som gör verklig skada: någon utökar en union i models.ts men glömmer `z.enum`, varpå sparade inställningar nollställs tyst i produktion.
-- **B** (`StoredSettings` + omtypad `loadStoredSettings`) rör den mest resiliensbärande funktionen i konfigurationsvägen och ger, som du påpekar, ingen ny garanti — bara en trevligare typsignatur. `export type StoredSettings = z.infer<typeof settingsSchema>` som ren dokumentationsalias är ofarligt och får gärna följa med, men refaktorering av casts i `loadStoredSettings` bör vara ett separat, testat steg.
+## 6. Kritik av din rekommendation
 
-De unioner som ska assertas (samtliga persisteras och har idag duplicerade literaler i models.ts och settings.schema.ts):
+**För:**
+- Punkt 1–2 (ingen stor omskrivning, behåll platt runtime + exportkontrakt) är rätt: nyttan är låg och risken hög, och ingen datamigrering tvingar fram det.
+- Punkt 4 (karakteriseringstester före union) är precis rätt ordning.
+- Delinterfacen finns redan och används i `shared/frequency.ts` och `shared/modeMap.ts` — mönstret är bevisat.
 
-- `NamingSettings["collisionPolicy"]` ↔ `namingSchema`
-- `SplitMode` ↔ `splitSchema.mode`
-- `FreqDupePolicy` ↔ `packsSchema.freqDupePolicy`
-- `RxOnlyPolicy` ↔ `packsSchema.rxOnlyPolicy`
-- `SortSettings["keys"][number]` ↔ `sortSchema.keys`
-- `HomeDistrictSort` ↔ `sortSchema.home_district_sort`
+**Emot / justeringar:**
+- "Centralisera konstruktion" motiveras i din formulering med mutations-/invariantdisciplin. Men pipelinen muterar redan inget. Den verkliga vinsten är i stället **tre duplicerade fältdefaults** (pipeline, NamingEditor, testhelpers) som glider isär när ett fält läggs till — vilket är exakt vad som händer när IC-705 kommer.
+- "Smalare parametertyper där det minskar koppling" är kosmetiskt för `filters`/`sorting`/`dedupe`. Det ändrar ingen bugg. Prioritera det lågt.
+- Din punkt 5 antyder att en union blir aktuell om ogiltiga tillstånd hittas. De två som hittats (`is_analog_fm`, `duplex "off"` + `tx_frequency`) löses båda av härledning/normalisering — inte av en union. Det är ett argument för att unionen kan skjutas upp *permanent*, inte bara "senare".
 
-```ts
-type Assert<T extends true> = T;
-type Eq<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
-type _Collision = Assert<
-  Eq<z.infer<typeof namingSchema>["collisionPolicy"], NamingSettings["collisionPolicy"]>
->;
-```
+## 7. Minsta säkra första ändring
 
-Alternativet med delade `as const`-arrayer gör drift omöjlig men ger en bred diff i models.ts. Rimlig kompromiss: `Eq`-assertions nu; `as const`-konstanter när nästa union ändå ska ändras.
+Tre små steg, i ordning. Inga exportbytes ändras.
 
-## Beteende som måste bevaras oförändrat
+**Steg A — en enda kanalkonstruktor**
+- Ny `src/lib/codeplug/channelFactory.ts` med `makeEmptyChannel(): NormalizedChannel` (alla fältdefaults på ett ställe) och `createChannel(over: Partial<NormalizedChannel>)`.
+- `pipeline.normalize()` och `channel_pack.parseChannelPackCsv()` byggs ovanpå den; `emptyPackFields`/`emptyAccessFields` ersätts.
+- `NamingEditor.makeExampleChannel` och testhelpern `makeChannel` använder samma bas.
+- Krav: byte-identiska snapshots i `targets/__snapshots__/snapshot-mixed-modes.test.ts.snap`.
 
-1. Korrupt JSON eller schemafel ⇒ `DEFAULT_SETTINGS` (inte krasch).
-2. `migrateFilter` och `migrateNaming` körs **före** `safeParse`, på rå JSON.
-3. `collisionPolicy: "stop"` ⇒ `"numeric_suffix"` utan att övriga sparade fält nollställs.
-4. `modeStrategy`/`customModes` ⇒ `modes`; `includeUnknownDistricts` ⇒ `includeUnknownRegions`.
-5. Okända fält bevaras på toppnivå och i `filter`, `naming`, `packs`, `sort`, `export.split` — och tappas (som idag) direkt under `export` och inuti per-target-patchar.
-6. Okänt `targetId` ⇒ `DEFAULT_SETTINGS.export.targetId`; okänt target-id i `perTarget` droppas; ogiltig target-patch ⇒ target-defaults.
-7. Saknad toppnivåsektion ⇒ full reset. Sprött, men ändra det inte här.
+**Steg B — härled `is_analog_fm` från effektiv mode**
+- Flytta beräkningen till expansionssteget (eller gör den till en helper `isAnalogFm(c)` byggd på `classifyChannel`) så att en C4FM-expanderad rad inte längre påstår sig vara analog FM.
+- Kontrollera VGC `encodeBandwidth` för regression.
 
-## Acceptanstester (justerade)
+**Steg C — invariantvakt i pipelinen (utvecklingsläge)**
+- `assertChannelInvariants(c)` som verifierar de faktiskt uppnåbara reglerna: `duplex === "off"` ⇒ ingen TX härleds; digital mode ⇒ ingen analog access; analog mode ⇒ inga digitala fält; `mode_effective` satt för SK6BA-rader efter expansion.
+- Körs i test (och ev. bakom `import.meta.env.DEV`), aldrig som runtime-throw i produktion.
+- Kompletteras med att `deriveTxMhz` respekterar `duplex === "off"` — antingen där, eller genom att `block_tx` nollställer `tx_frequency`. Detta bör beslutas explicit; det är en beteendeändring för nästa target.
 
-Under nyckeln `sk6ba-chirp-settings-v6`:
+**Berörda filer:** `src/lib/codeplug/channelFactory.ts` (ny), `pipeline.ts`, `importers/channel_pack.ts`, `accessModes.ts` (ev. `isAnalogFm`), `exporters/shared/frequency.ts` (steg C), `src/components/codeplug/NamingEditor.tsx`, `src/lib/codeplug/__tests__/helpers.ts`.
 
-1. `DEFAULT_SETTINGS` passerar schemat och `safeParse().data` deep-equals input.
-2. Legacy-payload (`collisionPolicy: "stop"`, `modeStrategy: "custom"`, `customModes: ["fm","System Fusion"]`, `includeUnknownDistricts: true`, `separator: "_"`, `perTarget: { "chirp-generic": { maxLength: 8 }, "removed-target": {…} }`) ⇒ policy migrerad, `separator` bevarat, `modes` innehåller FM och C4FM, `includeUnknownRegions === true`, `maxLength === 8`, `removed-target` borta.
-3. Okänt toppnivåfält överlever `load`.
-4. Okänt fält i `filter` / `naming` / `sort` / `packs` / `export.split` överlever.
-5. **Negativt test som låser fast dagens beteende**: okänt fält direkt under `export` och okänt fält i en per-target-patch försvinner. Dokumenterar avsikten så att ingen "fixar" det oavsiktligt.
-6. Reload-idempotens: `load → save → load` deep-equal.
-7. Drift-vakt: varje literal i `COLLISION_POLICIES`/split-modes/dupe-/rx-policies passerar respektive delschema (runtime-komplement till `Eq`-assertionerna).
+**Testplan:**
+1. Karakterisering: befintliga target-snapshots måste vara byte-identiska före/efter steg A.
+2. Nytt: `channelFactory.test.ts` — factory ger samma fältuppsättning som dagens literal (nyckeljämförelse mot en fryst fältlista).
+3. Nytt: `pipeline.invariants.test.ts` — kör hela fixture-flödet (SK6BA + 2m-pack, alla rxOnlyPolicy-lägen, mode-expansion FM/C4FM/DMR) och kör `assertChannelInvariants` på varje utgångskanal.
+4. Nytt: regression för `is_analog_fm` på `"FM / C4FM"`-expansion.
+5. Nytt: `duplex === "off"` + `tx_frequency` → TX-härledningen ger inte en TX-frekvens.
+
+## 8. Slutligt råd
+
+Din rekommendation är i huvudsak rätt, med en omprioritering: **gör inte unionen — nu eller senare — utan bevis, men flytta "centralisera konstruktion" från motivet "invariantkontroll" till motivet "en enda källa för fältdefaults", och lägg smalare parametertyper sist eftersom de inte löser något problem som faktiskt finns.** De två reella defekterna (`is_analog_fm` mot fel modefält, samt `duplex: "off"` med kvarvarande `tx_frequency`) är normaliseringsbuggar och ska fixas som sådana innan IC-705 påbörjas — en discriminated union hade inte fångat någon av dem.
