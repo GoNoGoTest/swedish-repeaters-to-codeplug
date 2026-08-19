@@ -178,6 +178,33 @@ describe("runPipeline mode expansion", () => {
     });
     expect(r.channels.map((c) => c.mode_effective).sort()).toEqual(["DMR", "FM"]);
   });
+
+  it("source_supports_analog_fm är true på BÅDA varianterna av 'FM / C4FM'", () => {
+    const r = runPipeline({
+      sk6baRows: [{ ...baseRow, mode: "FM / C4FM" }],
+      settings: {
+        ...baseSettings,
+        filter: { ...baseSettings.filter, modes: ["FM", "C4FM"] },
+      },
+    });
+    expect(r.channels).toHaveLength(2);
+    expect(r.channels.every((c) => c.source_supports_analog_fm)).toBe(true);
+    // Den aktuella variantens access-läge styrs av mode_effective, inte flaggan.
+    const byMode = Object.fromEntries(r.channels.map((c) => [c.mode_effective, classifyChannel(c)]));
+    expect(byMode).toEqual({ FM: "analog", C4FM: "c4fm" });
+  });
+
+  it("digital-only källrad ger source_supports_analog_fm === false", () => {
+    const r = runPipeline({
+      sk6baRows: [{ ...baseRow, mode: "DMR / D-Star" }],
+      settings: {
+        ...baseSettings,
+        filter: { ...baseSettings.filter, modes: [] },
+      },
+    });
+    expect(r.channels.length).toBeGreaterThan(0);
+    expect(r.channels.every((c) => c.source_supports_analog_fm)).toBe(false);
+  });
 });
 
 describe("runPipeline with channel pack", () => {
