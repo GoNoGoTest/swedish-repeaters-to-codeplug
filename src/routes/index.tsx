@@ -477,8 +477,8 @@ function Index() {
                   {pipeline.unresolvedCollisions > 0 && (
                     <div className="mb-3 rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                       <strong>{pipeline.unresolvedCollisions}</strong> kanaler kunde inte få unika
-                      namn – namnrymden är uttömd för radions maxlängd. Öka namnlängden eller
-                      minska antalet kanaler.
+                      namn – namnrymden är uttömd för radions maxlängd. Öka namnlängden eller minska
+                      antalet kanaler.
                     </div>
                   )}
                   {excludedKeys.size > 0 && (
