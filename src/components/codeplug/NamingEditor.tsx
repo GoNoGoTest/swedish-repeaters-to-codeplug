@@ -298,7 +298,6 @@ export function NamingEditor({
             >
               <option value="numeric_suffix">Numeriskt suffix (1, 2, 3…)</option>
               <option value="last_char_suffix">Bokstavssuffix (A, B, C…)</option>
-              <option value="stop">Stoppa export</option>
             </select>
           </Field>
         </div>

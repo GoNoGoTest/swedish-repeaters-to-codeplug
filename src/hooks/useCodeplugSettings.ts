@@ -67,13 +67,31 @@ function sanitizePerTarget(perTarget: Record<string, unknown>): Record<string, u
   return out;
 }
 
+/**
+ * Legacy `collisionPolicy: "stop"` finns inte längre — vanliga namnkollisioner
+ * löses automatiskt. Migrera värdet till `numeric_suffix` istället för att
+ * låta schemat underkänna (och nollställa) hela den sparade konfigurationen.
+ */
+export function migrateNaming(
+  parsedNaming: Record<string, unknown> | undefined | null,
+): Record<string, unknown> | undefined {
+  if (!parsedNaming || typeof parsedNaming !== "object") return parsedNaming ?? undefined;
+  const policy = parsedNaming.collisionPolicy;
+  if (policy === "numeric_suffix" || policy === "last_char_suffix") return parsedNaming;
+  return { ...parsedNaming, collisionPolicy: "numeric_suffix" };
+}
+
 function loadStoredSettings(): Settings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const migrated = { ...parsed, filter: migrateFilter(parsed?.filter as never) };
+    const migrated = {
+      ...parsed,
+      filter: migrateFilter(parsed?.filter as never),
+      naming: migrateNaming(parsed?.naming as never),
+    };
     const check = settingsSchema.safeParse(migrated);
     if (!check.success) {
       console.warn("Sparade inställningar ogiltiga, återställer defaults", check.error.format());
