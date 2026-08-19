@@ -1,5 +1,12 @@
 import { z } from "zod";
-import type { Settings } from "./models";
+import type {
+  FreqDupePolicy,
+  HomeDistrictSort,
+  NamingSettings,
+  RxOnlyPolicy,
+  SortSettings,
+  SplitMode,
+} from "./models";
 
 /**
  * Zod-schemas för persisterade Settings. Schemat är **inte** källa för
