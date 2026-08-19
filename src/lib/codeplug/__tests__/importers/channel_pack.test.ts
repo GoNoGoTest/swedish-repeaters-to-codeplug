@@ -54,6 +54,26 @@ describe("parseChannelPackCsv", () => {
     expect(r.channels[0].tx_allowed).toBe(true);
     expect(r.channels[0].rx_only).toBe(false);
   });
+
+  it("sätter source_supports_analog_fm från packens källmode", () => {
+    const csv = [
+      "pack_id,source_id,rx_frequency,mode,label",
+      "p1,fm,145.000,FM,A",
+      "p1,nfm,145.100,NFM,B",
+      "p1,blank,145.200,,C",
+      "p1,am,118.000,AM,D",
+      "p1,dmr,145.300,DMR,E",
+    ].join("\n");
+    const r = parseChannelPackCsv(csv, "modes.csv");
+    const flag = (id: string) =>
+      r.channels.find((c) => c.source_id === id)?.source_supports_analog_fm;
+    expect(flag("fm")).toBe(true);
+    expect(flag("nfm")).toBe(true);
+    // Tomt mode faller tillbaka till FM i importern → flaggan följer med.
+    expect(flag("blank")).toBe(true);
+    expect(flag("am")).toBe(false);
+    expect(flag("dmr")).toBe(false);
+  });
 });
 
 describe("selectPackChannels", () => {
