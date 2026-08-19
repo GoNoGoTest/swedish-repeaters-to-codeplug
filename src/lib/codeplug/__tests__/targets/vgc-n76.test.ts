@@ -30,7 +30,7 @@ describe("targets/vgc-n76", () => {
       tx_shift: -0.6,
       duplex: "-",
       offset: 0.6,
-      is_analog_fm: true,
+      source_supports_analog_fm: true,
     });
     const out = VGC_N76_TARGET.export([ch], VGC_N76_DEFAULTS);
     const parsed = Papa.parse<string[]>(out.content, { skipEmptyLines: true });
@@ -51,7 +51,7 @@ describe("targets/vgc-n76", () => {
       duplex: "-",
       offset: 0.6,
       ctcss_tx: 114.8,
-      is_analog_fm: true,
+      source_supports_analog_fm: true,
     });
     const out = VGC_N76_TARGET.export([ch], VGC_N76_DEFAULTS);
     const row = Papa.parse<string[]>(out.content, { skipEmptyLines: true }).data[1];
@@ -69,7 +69,7 @@ describe("targets/vgc-n76", () => {
       dtcs_code: "731",
       dtcs_polarity: "NN",
       tone_raw: "DTCS",
-      is_analog_fm: true,
+      source_supports_analog_fm: true,
     });
     const out = VGC_N76_TARGET.export([ch], VGC_N76_DEFAULTS);
     const row = Papa.parse<string[]>(out.content, { skipEmptyLines: true }).data[1];
@@ -208,7 +208,7 @@ describe("targets/vgc-n76 — APRS slot 32 reservation", () => {
       makeChannel({
         generated_name_final: `CH${i + 1}`,
         rx_frequency: 145.6 + i * 0.025,
-        is_analog_fm: true,
+        source_supports_analog_fm: true,
       }),
     );
     const out = VGC_N76_TARGET.export(channels, VGC_N76_DEFAULTS);
@@ -220,7 +220,7 @@ describe("targets/vgc-n76 — APRS slot 32 reservation", () => {
       makeChannel({
         generated_name_final: `CH${i + 1}`,
         rx_frequency: 145.0 + i * 0.0125,
-        is_analog_fm: true,
+        source_supports_analog_fm: true,
       }),
     );
     const out = VGC_N76_TARGET.export(channels, { ...VGC_N76_DEFAULTS, reserveAprsSlot32: true });
@@ -245,7 +245,7 @@ describe("targets/vgc-n76 — APRS slot 32 reservation", () => {
       makeChannel({
         generated_name_final: `CH${i + 1}`,
         rx_frequency: 145.6 + i * 0.025,
-        is_analog_fm: true,
+        source_supports_analog_fm: true,
       }),
     );
     const out = VGC_N76_TARGET.export(channels, {
@@ -267,7 +267,7 @@ describe("targets/vgc-n76 — APRS slot 32 reservation", () => {
       makeChannel({
         generated_name_final: `CH${i + 1}`,
         rx_frequency: 145.0 + i * 0.0125,
-        is_analog_fm: true,
+        source_supports_analog_fm: true,
         district: "6",
       }),
     );

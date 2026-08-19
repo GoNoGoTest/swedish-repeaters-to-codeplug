@@ -113,7 +113,7 @@ export function normalize(rows: RawRow[]): NormalizedChannel[] {
       status: (r.status ?? "").toString().trim(),
       mode_raw: modeRaw,
       mode_effective: "",
-      is_analog_fm: /\bFM\b/i.test(modeRaw),
+      source_supports_analog_fm: /\bFM\b/i.test(modeRaw),
       band,
       district,
       region: deriveRegion(district, call),

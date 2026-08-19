@@ -77,7 +77,7 @@ function makeExampleChannel(over: Partial<NormalizedChannel>): NormalizedChannel
     status: "QRV",
     mode_raw: "FM",
     mode_effective: "FM",
-    is_analog_fm: true,
+    source_supports_analog_fm: true,
     band: "",
     district,
     region: over.region ?? deriveRegion(district, over.call),

@@ -21,7 +21,7 @@ export function makeChannel(over: Partial<NormalizedChannel> = {}): NormalizedCh
     status: "QRV",
     mode_raw: "FM",
     mode_effective: "FM",
-    is_analog_fm: true,
+    source_supports_analog_fm: true,
     band: "2",
     city: "Borås",
     call: "SK6BA",
@@ -83,7 +83,7 @@ export function makeChannel(over: Partial<NormalizedChannel> = {}): NormalizedCh
 
 /** Analog FM 2 m repeater preset (matches `makeChannel` default). */
 export function makeAnalogRepeater(over: Partial<NormalizedChannel> = {}): NormalizedChannel {
-  return makeChannel({ mode_raw: "FM", mode_effective: "FM", is_analog_fm: true, ...over });
+  return makeChannel({ mode_raw: "FM", mode_effective: "FM", source_supports_analog_fm: true, ...over });
 }
 
 /** C4FM/Fusion 2 m repeater preset. */
@@ -91,7 +91,7 @@ export function makeC4fmRepeater(over: Partial<NormalizedChannel> = {}): Normali
   return makeChannel({
     mode_raw: "C4FM",
     mode_effective: "C4FM",
-    is_analog_fm: false,
+    source_supports_analog_fm: false,
     ...over,
   });
 }
@@ -109,7 +109,7 @@ export function makePackChannel(over: Partial<NormalizedChannel> = {}): Normaliz
     mode_pack: "FM",
     duplex: "",
     offset: 0,
-    is_analog_fm: true,
+    source_supports_analog_fm: true,
     ...over,
   });
 }

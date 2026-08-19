@@ -203,7 +203,7 @@ export function parseChannelPackCsv(text: string, fileName: string): PackParseRe
       status: "",
       mode_raw: mode || "FM",
       mode_effective: mode || "FM",
-      is_analog_fm: /^(N?FM)$/.test(mode),
+      source_supports_analog_fm: /^(N?FM)$/.test(mode),
       band,
       district: "",
       region: UNKNOWN_REGION,
