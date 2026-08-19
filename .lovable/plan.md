@@ -46,7 +46,7 @@ raw JSON  ──parse fail──> DEFAULT_SETTINGS
    + okända toppnivåfält bevaras
 ```
 
-Merge-mot-default före validering är det som faktiskt löser hela "saknat fält"-klassen ovan; enbart sektionsvis fallback räddar inte en payload som saknar `rxOnlyPolicy` — den skulle fortfarande tappa användarens `placement`. Merge är shallow (en nivå), utom `naming.abbreviations` som behöver ett extra steg: shallow merge av `type`/`network`/`band` mot defaults, annars raderar en gammal payload nya förkortningsnycklar.
+Merge-mot-default före validering är det som faktiskt löser hela "saknat fält"-klassen ovan; enbart sektionsvis fallback räddar inte en payload som saknar `rxOnlyPolicy` — den skulle fortfarande tappa användarens `placement`. Merge är **shallow, en nivå per sektion**. Enda undantaget är `naming.abbreviations`, som får exakt ett extra shallow-steg — se invändning 1 nedan (ingen djup map-merge).
 
 **Ja, `export` behöver undersektionsnivå.** Annars tappar ett trasigt `split.chunkSize: 1000` både `targetId` och hela `perTarget`. Dela upp i tre oberoende delar:
 
