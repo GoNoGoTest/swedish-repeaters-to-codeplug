@@ -5,6 +5,7 @@ export type WarningCode =
   | "missing_coords"
   | "empty_name"
   | "name_collision"
+  | "unresolved_name_collision"
   | "unknown_mode"
   | "unknown_type"
   | "pack_missing_required"
@@ -257,7 +258,11 @@ export interface NamingSettings {
   cityMaxLength: number;
   transliterate: boolean;
   uppercase: boolean;
-  collisionPolicy: "numeric_suffix" | "last_char_suffix" | "stop";
+  /**
+   * Automatisk, deterministisk omdöpning vid namnkollision. Den tidigare
+   * `"stop"`-policyn är borttagen: vanliga kollisioner är inte exportfel.
+   */
+  collisionPolicy: "numeric_suffix" | "last_char_suffix";
   abbreviations: {
     type: Record<string, string>;
     network: Record<string, string>;
