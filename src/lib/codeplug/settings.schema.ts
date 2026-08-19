@@ -101,9 +101,35 @@ export const settingsSchema = z
   .passthrough();
 
 /**
- * Typkontroll: zod-schemat ska vara strukturellt kompatibelt med Settings.
- * Vi exporterar inte den inferrade typen — Settings-typen från models.ts är
- * källan — men ett konditionellt typtest säkrar att vi inte glider isär.
+ * Äkta kompileringstidskontroll av de literal-unioner som dupliceras mellan
+ * `models.ts` (domäntyp) och schemat här (persistensgrind).
+ *
+ * Varför bara unionerna: schemats objekt är `.passthrough()`, så `z.infer`
+ * bär indexsignaturer och kan aldrig vara *exakt* lika med `Settings`. En
+ * assertion på hela objektet blir därför antingen falsklarm eller — som den
+ * tidigare `_SettingsSchemaCompatible` — urvattnad till en no-op.
+ *
+ * Unionerna är däremot den verkliga driftrisken: utökas t.ex.
+ * `SortSettings["keys"]` i models.ts utan att `sortSchema` följer med, så
+ * underkänns sparade inställningar tyst och användaren får defaults. Dessa
+ * assertions bryter bygget i stället.
  */
-export type _SettingsSchemaCompatible =
-  z.infer<typeof settingsSchema> extends Partial<Settings> ? true : true;
+type Assert<T extends true> = T;
+type Eq<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+
+export type _CollisionPolicyInSync = Assert<
+  Eq<z.infer<typeof namingSchema>["collisionPolicy"], NamingSettings["collisionPolicy"]>
+>;
+export type _SplitModeInSync = Assert<Eq<z.infer<typeof splitSchema>["mode"], SplitMode>>;
+export type _FreqDupePolicyInSync = Assert<
+  Eq<z.infer<typeof packsSchema>["freqDupePolicy"], FreqDupePolicy>
+>;
+export type _RxOnlyPolicyInSync = Assert<
+  Eq<z.infer<typeof packsSchema>["rxOnlyPolicy"], RxOnlyPolicy>
+>;
+export type _SortKeysInSync = Assert<
+  Eq<z.infer<typeof sortSchema>["keys"][number], SortSettings["keys"][number]>
+>;
+export type _HomeDistrictSortInSync = Assert<
+  Eq<z.infer<typeof sortSchema>["home_district_sort"], HomeDistrictSort>
+>;
