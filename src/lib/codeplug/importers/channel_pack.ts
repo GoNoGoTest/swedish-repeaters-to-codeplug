@@ -203,7 +203,9 @@ export function parseChannelPackCsv(text: string, fileName: string): PackParseRe
       status: "",
       mode_raw: mode || "FM",
       mode_effective: mode || "FM",
-      source_supports_analog_fm: /^(N?FM)$/.test(mode),
+      // Packens källmode avgör flaggan. Tomt mode faller tillbaka till FM
+      // (se mode_raw/mode_effective ovan) och ska därför ge true.
+      source_supports_analog_fm: mode === "" || /^(N?FM|WFM)$/.test(mode),
       band,
       district: "",
       region: UNKNOWN_REGION,
