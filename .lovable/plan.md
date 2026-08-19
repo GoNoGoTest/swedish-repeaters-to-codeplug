@@ -46,7 +46,7 @@ raw JSON  ──parse fail──> DEFAULT_SETTINGS
    + okända toppnivåfält bevaras
 ```
 
-Merge-mot-default före validering är det som faktiskt löser hela "saknat fält"-klassen ovan; enbart sektionsvis fallback räddar inte en payload som saknar `rxOnlyPolicy` — den skulle fortfarande tappa användarens `placement`. Merge är shallow (en nivå), utom `naming.abbreviations` som behöver ett extra steg: shallow merge av `type`/`network`/`band` mot defaults, annars raderar en gammal payload nya förkortningsnycklar.
+Merge-mot-default före validering är det som faktiskt löser hela "saknat fält"-klassen ovan; enbart sektionsvis fallback räddar inte en payload som saknar `rxOnlyPolicy` — den skulle fortfarande tappa användarens `placement`. Merge är **shallow, en nivå per sektion**. Enda undantaget är `naming.abbreviations`, som får exakt ett extra shallow-steg — se invändning 1 nedan (ingen djup map-merge).
 
 **Ja, `export` behöver undersektionsnivå.** Annars tappar ett trasigt `split.chunkSize: 1000` både `targetId` och hela `perTarget`. Dela upp i tre oberoende delar:
 
@@ -54,9 +54,7 @@ Merge-mot-default före validering är det som faktiskt löser hela "saknat fäl
 - `perTarget`: måste vara ett objekt (annars `{}`); därefter befintlig `sanitizePerTarget` per id — okända id droppas, ogiltig patch → det targetets defaults, övriga target orörda.
 - `split`: merge mot default → `splitSchema` → fel? `DEFAULT.export.split`.
 
-Det är enda strukturella ändringen. `settingsSchema` behålls som är (fortsatt användbart i tester och som dokumentation), men `loadStoredSettings` slutar använda helhetsvarianten som grind. Alternativt exporteras helheten som en ren `composeSettings`-hjälpare så testerna kan köra den direkt.
-
-Rekommenderat att bryta ut logiken till `src/lib/codeplug/settings.load.ts` (ren funktion `loadSettingsFromRaw(raw: unknown): Settings`) så persistensen kan testas utan `renderHook`. Hooken blir tunn. Ingen `STORAGE_KEY`-bump behövs — poängen är just att gamla nycklar ska överleva.
+Det är enda strukturella ändringen. `settingsSchema` behålls som är, men `loadStoredSettings` slutar använda helhetsvarianten som grind (se invändning 5). Filscope enligt invändning 4. Ingen `STORAGE_KEY`-bump — poängen är just att gamla nycklar ska överleva.
 
 ## 3. Regressionsrisker
 
@@ -100,8 +98,57 @@ Legacy och passthrough:
 
 Acceptanskriterium sammanfattat: *ett fel i en sektion får aldrig påverka en annan sektion, och ett saknat fält får aldrig kasta bort syskonfält i samma sektion.*
 
-## 5. Rekommendation
+## 5. Prövning av invändningarna
 
-**Implementera — men i den avgränsade formen ovan.** Motivet är konkret: dagens beteende innebär att varje framtida fälttillägg i `naming`/`sort`/`packs`/`export` tyst nollställer alla sparade inställningar för befintliga användare vid nästa läsning, om vi inte kommer ihåg att skriva en migrering. Med merge-före-validering blir fälttillägg bakåtkompatibla per konstruktion. Det är en förutsättning för att lägga till fler exporttargets utan att bränna användarnas konfiguration.
+### 1. `naming.abbreviations` — ingen djup map-merge. Invändningen är riktig.
 
-Avgränsning: ingen kors-sektionsvalidering, ingen ny lagringsnyckel, ingen ändring av `settingsSchema`s form, inga UI-ändringar utöver eventuell `console.warn`-text. Uppskattad omfattning: en ny ren modul (~120 rader), en tunnare hook, samt testfallen i punkt 4.
+Kontrollerat: `NamingEditor.tsx` innehåller inga referenser till `abbreviations` alls, och `naming.ts` läser mapparna rent uppslagsvis med fallback (`n.abbreviations.type[ch.type] ?? ch.type`). Alltså:
+
+- En saknad nyckel är **ofarlig** — namngivningen faller tillbaka på råvärdet.
+- Mapparna är fritt användarstyrda `Record<string,string>` och schemat kräver inga specifika nycklar.
+- En djup map-merge skulle därför lösa ett icke-problem och samtidigt kunna återinföra en mapping som användaren avsiktligt tagit bort (via importerad/handredigerad payload — UI:t kan det inte idag, men det är inte något vi vill låsa fast).
+
+**Rekommendation: bara `{ ...DEFAULT.abbreviations, ...stored.abbreviations }`.** Det fyller saknade `type`/`network`/`band`/`districtPrefix` (som schemat kräver) men bevarar ett uttryckligen sparat `type`-record exakt. Ändrat i avsnitt 2 ovan.
+
+### 2. Rot måste vara ett vanligt objekt. Ja.
+
+`JSON.parse` kan ge `null`, array, sträng eller tal, och `"[1,2]"` skulle med naiv toppnivå-passthrough ge oss `{"0":1,"1":2}` som bevarade "framtida fält" — brus som sedan skrivs tillbaka till localStorage och lever vidare för alltid.
+
+**Rekommendation:** loadern kräver först `typeof raw === "object" && raw !== null && !Array.isArray(raw)`, annars `DEFAULT_SETTINGS` — samma väg som korrupt JSON. Samma vakt tillämpas per sektion innan merge: en sektion som inte är ett vanligt objekt går direkt till sin default. (`filter.statuses` m.fl. är fortfarande arrayer inuti sektionerna; vakten gäller bara sektionsroten.)
+
+### 3. Gränsen merge-vid-saknat / default-vid-ogiltigt — bekräftas.
+
+Regeln är: *frånvaro är inte ett fel, det är en äldre payload; ett närvarande men ogiltigt värde är okänd data vi inte kan tolka.*
+
+Vi ska **inte** gå ned till fältvis räddning av typ-/enumfel, av tre skäl:
+- Det kräver att varje sektionsschema splittas i per-fält-scheman eller att vi tolkar `ZodError.issues` och plockar bort felande paths — betydligt mer kod och en ny felkälla, tvärtemot "minsta säkra ändring".
+- Zod-fel har inte alltid en entydig path (unions, `.refine`), så fältvis räddning blir approximativ.
+- Ett ogiltigt enum-värde signalerar oftast en *legacy-form* vi borde migrera explicit (som `collisionPolicy: "stop"`), inte tysta bort fält för fält. Sektionsdefault gör den skulden synlig i en `console.warn` i stället för att dölja den.
+
+Blastradien för sektionsdefault är dessutom liten så snart sektionerna är isolerade: du tappar en sektion, inte hela konfigurationen.
+
+### 4. Filscope — mindre än ~120 rader, en fil.
+
+Invändningen är befogad; en egen "modul" med flera exports vore överarkitektur. Nästan all logik finns redan (`migrateFilter`, `migrateNaming`, `sanitizePerTarget`, targetId-fallbacken). Det som verkligen tillkommer är en liten generisk hjälpare plus fem anrop.
+
+**Exakt scope:**
+- `src/hooks/useCodeplugSettings.ts` — behålls som enda hem för logiken. Där: en lokal `parseSection(name, stored, fallback, schema)` (~10 rader) och en omskriven `loadStoredSettings` som anropar den per sektion. Nettotillskott uppskattat 40–60 rader. `migrateNaming` fortsätter exporteras (befintligt test).
+- Ny export från samma fil: `export function loadSettingsFromRaw(raw: unknown): Settings` — det testbara ytan. `loadStoredSettings` blir `loadSettingsFromRaw(JSON.parse(localStorage.getItem(KEY)))` med try/catch runt.
+- `src/hooks/__tests__/settingsPersistence.test.tsx` — utökas; de nya rena fallen kan testas direkt mot `loadSettingsFromRaw` utan `renderHook`, befintliga hook-tester lämnas kvar.
+
+Ingen ny fil under `src/lib/codeplug/`. `settings.schema.ts` och `targets/registry.ts` rörs inte.
+
+### 5. Ingen slutkontroll med `settingsSchema` i runtime-vägen.
+
+Att köra den sammansatta produkten genom `settingsSchema` och falla tillbaka på `DEFAULT_SETTINGS` vid fel återinför exakt den totalfallback vi tar bort — och i det värsta läget: efter att varje sektion redan validerats kan bara ett programmeringsfel få helheten att fela, och då straffas användaren för vår bugg.
+
+**Rekommendation:** upptäck programmeringsfel utan runtime-kostnad:
+- I test: ett fall som kör `loadSettingsFromRaw` på ett urval trasiga payloads och asserterar `settingsSchema.safeParse(result).success === true` för varje. Där är totalvalideringen exakt rätt verktyg.
+- Behåll den befintliga invarianten "`settingsSchema` godkänner `DEFAULT_SETTINGS`".
+- Valfritt i runtime: `if (import.meta.env.DEV)` → `settingsSchema.safeParse(result)` och `console.error` vid fel, men **returnera resultatet ändå**. Ingen fallback, bara ett larm.
+
+## 6. Slutligt beslut
+
+**Implementera, med justeringarna ovan.** Sektionsvis migrera → shallow-merge → validera → sektionsdefault, `export` uppdelat i `targetId` / `perTarget` / `split`, objektvakt på rot och per sektion, `abbreviations` enbart shallow-mergad, ingen fältvis räddning, ingen runtime-slutvalidering av helheten. Allt i `src/hooks/useCodeplugSettings.ts` plus utökade tester i `src/hooks/__tests__/settingsPersistence.test.tsx`.
+
+Utanför scope: kors-sektionsvalidering, ny lagringsnyckel, ändringar i `settings.schema.ts` eller target-registret, UI-ändringar.
