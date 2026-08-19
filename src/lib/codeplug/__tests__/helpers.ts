@@ -83,7 +83,12 @@ export function makeChannel(over: Partial<NormalizedChannel> = {}): NormalizedCh
 
 /** Analog FM 2 m repeater preset (matches `makeChannel` default). */
 export function makeAnalogRepeater(over: Partial<NormalizedChannel> = {}): NormalizedChannel {
-  return makeChannel({ mode_raw: "FM", mode_effective: "FM", source_supports_analog_fm: true, ...over });
+  return makeChannel({
+    mode_raw: "FM",
+    mode_effective: "FM",
+    source_supports_analog_fm: true,
+    ...over,
+  });
 }
 
 /** C4FM/Fusion 2 m repeater preset. */

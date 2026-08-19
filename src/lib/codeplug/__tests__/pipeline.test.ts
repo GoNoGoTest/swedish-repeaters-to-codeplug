@@ -191,7 +191,9 @@ describe("runPipeline mode expansion", () => {
     expect(r.channels).toHaveLength(2);
     expect(r.channels.every((c) => c.source_supports_analog_fm)).toBe(true);
     // Den aktuella variantens access-läge styrs av mode_effective, inte flaggan.
-    const byMode = Object.fromEntries(r.channels.map((c) => [c.mode_effective, classifyChannel(c)]));
+    const byMode = Object.fromEntries(
+      r.channels.map((c) => [c.mode_effective, classifyChannel(c)]),
+    );
     expect(byMode).toEqual({ FM: "analog", C4FM: "c4fm" });
   });
 
