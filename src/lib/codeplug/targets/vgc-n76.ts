@@ -143,7 +143,9 @@ function encodeBandwidth(c: NormalizedChannel, s: VgcN76Settings): 12500 | 25000
   if (m === "NFM") return 12500;
   if (m === "FM") return 25000;
   if (m === "AM") return 25000;
-  if (m === "" && c.is_analog_fm) return s.defaultBandwidth;
+  // Övriga fall (inkl. SK6BA-rader utan mode_pack) använder targetens
+  // default. Tidigare fanns en separat gren för analoga källrader, men
+  // båda grenarna returnerade samma värde.
   return s.defaultBandwidth;
 }
 

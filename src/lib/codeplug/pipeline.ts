@@ -113,7 +113,10 @@ export function normalize(rows: RawRow[]): NormalizedChannel[] {
       status: (r.status ?? "").toString().trim(),
       mode_raw: modeRaw,
       mode_effective: "",
-      is_analog_fm: /\bFM\b/i.test(modeRaw),
+      // Källradens egenskap: erbjuder raden analog FM? Härleds ur de
+      // parsade källmoderna så att "FM / C4FM" ger true på BÅDA de
+      // expanderade varianterna (expandModes kopierar fältet vidare).
+      source_supports_analog_fm: parseModes(modeRaw).includes("FM"),
       band,
       district,
       region: deriveRegion(district, call),

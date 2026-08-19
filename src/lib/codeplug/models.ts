@@ -60,7 +60,9 @@ import type { RegionInfo, RegionCountryCode } from "./region";
  * read `c.rx_frequency`, `c.mode_effective`, etc. are unaffected.
  *
  * Snittpunkter (locked in to avoid future bikeshedding):
- *  - `is_analog_fm` hör till `ChannelMode` (härlett från mode, inte access).
+ *  - `source_supports_analog_fm` hör till `ChannelMode` (härlett från
+ *    källradens mode, inte från access och inte från den expanderade
+ *    exportvariantens mode).
  *  - `mode_pack` hör till `ChannelPackMeta` (SK6BA-rader har "").
  *  - `tx_allowed` / `rx_only` ligger i `ChannelPackMeta` (det är där de
  *    faktiskt varierar; SK6BA-defaults är `true` / `false`).
@@ -87,7 +89,18 @@ export interface ChannelMode {
    * an empty string for unknown / unparseable inputs.
    */
   mode_effective: string;
-  is_analog_fm: boolean;
+  /**
+   * True när *källraden/källkanalen* erbjuder analog FM — inte när den
+   * aktuella expanderade exportvarianten råkar vara analog. En SK6BA-rad
+   * med `mode_raw="FM / C4FM"` expanderas till två kanaler och båda har
+   * `source_supports_analog_fm === true`.
+   *
+   * Använd ALDRIG detta fält för att avgöra den aktuella variantens
+   * signal-/accessläge. Använd `classifyChannel()` (accessModes.ts) eller
+   * `channelSignalMode()` (modes.ts), som utgår från `mode_effective` /
+   * `mode_pack`.
+   */
+  source_supports_analog_fm: boolean;
 }
 
 /** RX-frekvens, TX-frekvens, duplex/offset. */
