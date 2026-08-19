@@ -89,6 +89,17 @@ export interface ChannelMode {
    * an empty string for unknown / unparseable inputs.
    */
   mode_effective: string;
+  /**
+   * True när *källraden/källkanalen* erbjuder analog FM — inte när den
+   * aktuella expanderade exportvarianten råkar vara analog. En SK6BA-rad
+   * med `mode_raw="FM / C4FM"` expanderas till två kanaler och båda har
+   * `source_supports_analog_fm === true`.
+   *
+   * Använd ALDRIG detta fält för att avgöra den aktuella variantens
+   * signal-/accessläge. Använd `classifyChannel()` (accessModes.ts) eller
+   * `channelSignalMode()` (modes.ts), som utgår från `mode_effective` /
+   * `mode_pack`.
+   */
   source_supports_analog_fm: boolean;
 }
 
