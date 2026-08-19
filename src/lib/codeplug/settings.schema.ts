@@ -35,7 +35,7 @@ export const namingSchema = z
     cityMaxLength: z.number().int().min(1).max(64),
     transliterate: z.boolean(),
     uppercase: z.boolean(),
-    collisionPolicy: z.enum(["numeric_suffix", "last_char_suffix", "stop"]),
+    collisionPolicy: z.enum(["numeric_suffix", "last_char_suffix"]),
     abbreviations: z
       .object({
         type: z.record(z.string()),

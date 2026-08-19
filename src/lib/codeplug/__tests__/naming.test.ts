@@ -149,16 +149,40 @@ describe("resolveCollisions", () => {
     expect(channels[1].generated_name_final).toBe("MALMO");
   });
 
-  it("policy=stop leaves collisions unresolved", () => {
-    const a = makeChannel({ generated_name_final: "X" });
-    const b = makeChannel({ generated_name_final: "X" });
+  it("maxLength=1 ger unika ensiffriga namn utan att hänga", () => {
+    const chans = Array.from({ length: 5 }, () => makeChannel({ generated_name_final: "X" }));
     const { channels, unresolved } = resolveCollisions(
-      [a, b],
-      { ...naming, collisionPolicy: "stop" },
+      chans,
+      { ...naming, collisionPolicy: "numeric_suffix" },
+      1,
+    );
+    expect(unresolved).toBe(0);
+    expect(channels.map((c) => c.generated_name_final)).toEqual(["1", "2", "3", "4", "5"]);
+  });
+
+  it("markerar uttömd namnrymd som olöst istället för tyst dubblett", () => {
+    const chans = Array.from({ length: 12 }, () => makeChannel({ generated_name_final: "X" }));
+    const { channels, unresolved } = resolveCollisions(
+      chans,
+      { ...naming, collisionPolicy: "numeric_suffix" },
+      1,
+    );
+    expect(unresolved).toBeGreaterThan(0);
+    const flagged = channels.filter((c) =>
+      c.warnings.some((w) => w.code === "unresolved_name_collision"),
+    );
+    expect(flagged.length).toBe(unresolved);
+  });
+
+  it("bokstavssuffix rullar över till AA efter Z", () => {
+    const chans = Array.from({ length: 27 }, () => makeChannel({ generated_name_final: "X" }));
+    const { channels, unresolved } = resolveCollisions(
+      chans,
+      { ...naming, collisionPolicy: "last_char_suffix" },
       6,
     );
-    expect(unresolved).toBe(1);
-    expect(channels[1].collided).toBe(true);
-    expect(a.collided).toBe(false);
+    expect(unresolved).toBe(0);
+    expect(channels[25].generated_name_final).toBe("XZ");
+    expect(channels[26].generated_name_final).toBe("XAA");
   });
 });
