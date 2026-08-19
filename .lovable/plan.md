@@ -1,101 +1,82 @@
-## Mål
+# Flexibel kolumnhantering för SK6BA-importen
 
-Extrahera target-relaterade deriveringar från `src/routes/index.tsx` till en återanvändbar hook så att route-komponenten orkestrerar UI-state — inte target-specifika switch-satser.
+Idag kräver `loadSk6baCsv()` att alla 24 poster i `EXPECTED_COLS` finns i rubrikraden. Saknas `masl`, `magl`, `ant`, `backup`, `dir`, `watt_pep` m.fl. avvisas en fullt användbar fil. Ingen av dessa kolumner läses av `normalize()` i pipeline.ts — den rör bara `output, tx_shift, access, mode, type, status, band, district, call, city, channel, network, network_id, id, lat, lng, locator`.
 
-## Problembild i nuvarande `routes/index.tsx`
+## 1. Vad som verkligen måste vara obligatoriskt
 
-Fyra närmast identiska `switch (target.id)`-block existerar enbart för TypeScript-narrowing:
+Bara **`output`** är semantiskt nödvändig. Utan RX-frekvens finns ingen kanal — allt annat kan defaultas.
 
-1. `maxNameLength` (rad 91–116) — varje case anropar samma `resolveMaxNameLength?.() ?? limits.maxNameLength`.
-2. `getExportMode` (rad 187–208) — varje case bygger samma `(c) => target.previewMode?.(c, s) ?? "—"`.
-3. target-`validate(...)` i JSX (rad 546–576) — varje case anropar samma `validate?.(channels, s)`.
-4. Spridd target-specifik logik: `chirpSettings`-derivering (rad 84–87) och `startLocation`-läsning i `locationByKey` (rad 172).
+`mode`, `type`, `status` föreslogs som required, men de är egentligen *starkt rekommenderade*, inte nödvändiga:
 
-Plus en target-koppling i `useEffect` (rad 142–148): RT-Systems stödjer inte `block_tx` som RX-only-policy.
+- `mode` saknas → `expandModes()` ger inga kanaler. Det är ett tomt men korrekt resultat; med fallback "FM" blir filen användbar.
+- `status` / `type` saknas → farligare i praktiken, eftersom default-filtret är `statuses: ["QRV"]` och `types: ["Repeater","Link","Hotspot"]`. Alla rader får tom sträng och filtreras bort ⇒ tom förhandsvisning som ser ut som en bugg.
 
-## Ny hook: `useActiveExportTarget`
+Föreslagen indelning:
 
-Plats: `src/hooks/useActiveExportTarget.ts`
+| Nivå | Fält | Beteende om det saknas |
+| --- | --- | --- |
+| Required | `output` | Hard fail med tydligt felmeddelande |
+| Recommended | `mode`, `status`, `type`, `tx_shift`, `access`, `band`, `district`, `call`, `city`, `channel` | Laddas ändå, med defaults + diagnostik, och filtret neutraliseras (se punkt 4) |
+| Optional | `id`, `network`, `network_id`, `lat`, `lng`, `locator`, `updated`, `masl`, `magl`, `watt_pep`, `dir`, `ant`, `backup` + okända kolumner | Tyst, bevaras som de är |
 
-Signatur:
+Motivering: hard-fail bara där vi omöjligt kan gissa. Allt annat blir en synlig varning istället för ett stopp.
 
-```ts
-function useActiveExportTarget(settings: Settings): {
-  target: AnyExportTarget;
-  storedPatch: Record<string, unknown> | undefined;
-  resolvedSettings: TargetSettingsMap[TargetId]; // narrowed per target internt
-  maxNameLength: number;
-  previewMode: (c: NormalizedChannel) => string;
-  validate: (channels: NormalizedChannel[]) => Warning[];
-  previewStartLocation: number; // chirp: startLocation, övriga: 1
-  supportsRxOnlyPolicy: (p: RxOnlyPolicy) => boolean;
-};
-```
+## 2. Manuell kolumnmappnings-UI
 
-### Implementation
+**Skjut upp.** Den behövs bara när `output` inte kan identifieras ens via alias, vilket blir sällsynt när aliaslistan finns. Ta först alias + diagnostik; lägg till mappnings-UI först om verklig användning visar att det behövs. Felmeddelandet vid hard fail listar då de kolumner filen faktiskt har, så användaren kan döpa om själv.
 
-En enda intern `switch (target.id)` med `assertNever`-default narrowas target + settings korrekt, sedan exponeras färdiga värden/closures. Inga `as`-casts.
+## 3. Minsta robusta arkitektur
 
-```ts
-switch (target.id) {
-  case "chirp-generic": {
-    const s = resolveTargetSettings(target, storedPatch);
-    return buildBundle(target, s, /* previewStart */ s.startLocation);
-  }
-  case "vgc-n76": { const s = resolveTargetSettings(target, storedPatch); return buildBundle(target, s, 1); }
-  case "nicsure-rt880": { ... }
-  case "rt-systems-yaesu-generic": { ... }
-  default: return assertNever(target);
-}
-```
+Ny fil `src/lib/codeplug/importers/sk6ba.columns.ts`:
 
-`buildBundle` är en intern generic-helper `<T>(target: ExportTarget<T>, s: T, startLoc: number)` som returnerar bundle-objektet — narrowingen sker en gång i switchen, inte fyra.
+- `COLUMN_CONTRACT`: kanoniskt fältnamn → `{ level: "required" | "recommended" | "optional", aliases: string[] }`.
+- `normalizeHeader(h)`: trim, lowercase, `-`/mellanslag → `_`, ta bort omgivande citattecken.
+- `resolveColumns(headers)` → `{ map: Record<rawHeader, canonicalKey>, missingRequired, missingRecommended, aliasesApplied, unknownColumns, ambiguous }`.
 
-`supportsRxOnlyPolicy` flyttar RT-Systems-undantaget från `useEffect` in i hooken (en table: `{ "rt-systems-yaesu-generic": p => p !== "block_tx" }`, default `() => true`).
+Ändringar i `sk6ba.ts`:
 
-`chirpSettings` försvinner som top-level-derivering i route. Komponenter som idag tar `chirpSettings` (ExportPanel?) får antingen `resolvedSettings` typed via en separat narrowed-accessor eller fortsätter ta `targetSettings: Record<string, unknown>` som idag.
+- `parseSk6baCsv` använder `transformHeader` för normalisering och mappar sedan om raden till kanoniska nycklar. **Okända kolumner behålls** med sitt normaliserade namn, så `RawRow` (redan `Record<string,string>`) är oförändrad som typ.
+- `ImportResult` byter ut `missingColumns: string[]` mot `contract: ColumnContractResult` (behåll `missingColumns` som deprecated alias för required-listan så UI/tester inte bryts abrupt).
+- `loadSk6baCsv` hard-failar bara när `missingRequired.length > 0`. Övrigt går ut som `ParseWarning[]` (`source: "contract"`) i det befintliga `parseWarnings`-flödet.
 
-### Memoisering
+Ambiguitet (två headers mappar till samma kanoniska fält): första exakta träffen vinner före alias-träff; annars första kolumnen — och en varning.
 
-Hela bundle:n memoas på `[target, storedPatch]`. `previewMode` och `validate` är stabila inom samma bundle.
+Berörda filer: `importers/sk6ba.ts`, ny `importers/sk6ba.columns.ts`, `importers/schemas.ts` (utöka `ParseWarning["source"]`), `components/codeplug/RepeaterLoader.tsx` (visa kontraktsdiagnostik i den befintliga `ParseWarningsPanel`), `routes/index.tsx` (filter-neutralisering, se nedan). Pipeline, exportörer och naming rörs inte.
 
-## Ändringar i `src/routes/index.tsx`
+## 4. Defaults och filter när rekommenderade kolumner saknas
 
-- Ersätt rad 77–116 och 187–208 med `const { target, maxNameLength, previewMode, validate, previewStartLocation, supportsRxOnlyPolicy } = useActiveExportTarget(settings);`
-- `locationByKey` läser `previewStartLocation` istället för att switcha på `target.id`.
-- JSX-blocket rad 546–576 blir `const tw = validate(exportChannels);`
-- `useEffect` rad 142–148 blir `if (!supportsRxOnlyPolicy(settings.packs.rxOnlyPolicy)) { ...skip... }` — fortfarande generiskt, ingen target-namn i route.
-- `chirpSettings`-variabeln tas bort från route; `ExportPanel` får fortsatt `targetSettings` (opaque patch) som idag.
+- `mode` saknas → sätt `"FM"` per rad vid normalisering av rådata, plus en varning "mode saknas, antar FM".
+- `status` saknas → hoppa över statusfiltret helt (behandla filtret som avstängt), inte "matcha tom sträng". Samma för `type`.
+- Konkret: `parseSk6baCsv` returnerar `presentFields: Set<canonicalKey>`; `filterChannels` (eller anroparen i `routes/index.tsx`) hoppar över facetter vars källkolumn saknas.
+- `RepeaterFilterPanel` bygger sina val från `summary.uniqueCounts` — dölj facetter utan källkolumn istället för att visa en ensam "(tom)"-post.
+- `band` saknas → härleds redan från frekvens av `bands.ts`; ingen åtgärd.
+- `district`/`call` saknas → `deriveRegion()` ger "unknown"; region-facetten döljs på samma sätt.
+- `lat`/`lng` saknas → avståndsfiltret stängs av (visa förklaring i UI).
 
-Inga ändringar i:
+## 5. Migration och bakåtkompatibilitet
 
-- target-modulerna (`chirp-generic.ts`, `vgc-n76.ts`, ...)
-- `registry.ts` / `types.ts`
-- pipeline, importers, exporters, models
+- Rena SK6BA-exporter fortsätter parsa bit-identiskt: alla kanoniska namn matchar redan exakt, inga alias appliceras, inga varningar.
+- Sparade exporter i localStorage lagrar rå CSV-text och parsas om ⇒ inget migrationssteg.
+- Sparade filterinställningar kan innehålla statusar som inte finns i en smalare fil; neutraliseringen ovan gör det ofarligt utan att skriva om användarens inställningar.
+- `missingColumns` behålls i typen (nu = enbart required) så nuvarande fel-UI och tester fortsätter fungera.
 
-## Tester
+## 6. Testplan
 
-- Ny `src/hooks/__tests__/useActiveExportTarget.test.tsx` med en case per target:
-  - Verifierar `maxNameLength`, `previewMode(c)`, `validate(channels)`, `previewStartLocation` matchar direkta anrop mot target API:t.
-  - Verifierar `supportsRxOnlyPolicy("block_tx")` är `false` enbart för RT-Systems.
-- Befintliga tester (`PreviewTable`, snapshots, target-tester) ska passera oförändrade — hooken är ren refactor av routes/index.tsx.
+Nya/utökade tester i `src/lib/codeplug/__tests__/importers/`:
 
-## Acceptanskriterier
+1. Fil utan `masl,magl,ant,backup,dir,watt_pep` → `status: "loaded"`, inga varningar av nivå error.
+2. Fil utan `output` → `status: "error"`, meddelandet listar filens faktiska kolumner.
+3. Alias: `frequency`/`rx_frequency` → `output`, `shift`/`offset` → `tx_shift`, `latitude`/`longitude` → `lat`/`lng`; verifiera att `rows[0].output` finns.
+4. Header-normalisering: `"Output "`, `"TX Shift"`, `"District"` mappar rätt.
+5. Okänd kolumn `foo` bevaras i `RawRow` och rapporteras som `unknown_column`-varning.
+6. Ambiguitet: både `output` och `frequency` finns → exakt matchning vinner + varning.
+7. Snapshot: nuvarande `sk6ba-sample.csv` ger identiska `rows` före/efter (regressionsskydd).
+8. Filter: fil utan `status`-kolumn ger icke-tom förhandsvisning trots default `statuses: ["QRV"]` (pipeline- eller komponenttest).
 
-- Inga `switch (target.id)`-block kvar i `routes/index.tsx`.
-- `useActiveExportTarget` är enda stället där target-narrowing sker för dessa deriveringar.
-- Inga `as any` / `as unknown as`-casts införs.
-- `bun run verify` passerar.
-- Manuell preview: byt mellan alla fyra targets → samma `maxNameLength`, preview-mode-kolumn, target-warnings, och Loc-numrering som före.
+## 7. Risker och invändningar mot ursprungsförslaget
 
-## Utanför scope
-
-- Att splittra `NormalizedChannel`/models vidare.
-- Att flytta `ExportPanel`s egna `target.id`-narrowing (panelens sub-panel-routing är en separat refactor).
-- IC-705 eller nya targets.
-- Ändringar i pipeline/importers/exporters.
-
-## Risker
-
-- `ExportPanel` förväntar sig kanske `chirpSettings` som prop idag — om så är fallet ersätts den i samma patch med `targetSettings`-patchen den redan får (kontrolleras vid implementation; om props-formen är annan, byggs en tunn adapter i route utan target-switch).
-- `useEffect`-omskrivningen får inte trigga sig själv i loop — `supportsRxOnlyPolicy` läses som funktion, `useEffect`-deps förblir `[settings.export.targetId]`.
+- **Att göra `mode`/`type`/`status` required löser fel problem.** Det byter ett falskt "saknad kolumn"-fel mot ett annat. Det verkliga felet är att default-filtret tyst tömmer resultatet — därför är filter-neutraliseringen (punkt 4) den viktigaste delen av den här ändringen, inte kontraktet i sig.
+- **Alias kan tolka fel.** `offset` betyder shift-belopp i vissa exporter men riktning i andra. Vi mappar bara namn, aldrig värden; `parseShift()` avgör tolkningen och flaggar `unclear_shift` som förut.
+- **Tyst default `mode: "FM"`** kan producera kanaler som inte finns i verkligheten. Mildras av en synlig varning; alternativet (noll kanaler) är sämre.
+- **Diagnostikbrus**: en främmande CSV kan generera dussintals `unknown_column`-varningar. Slå ihop dem till en rad ("N okända kolumner: …") i panelen.
+- **Scope creep**: manuell mappnings-UI + kontrakt i samma steg fördubblar ytan. Därför uppdelningen ovan.
