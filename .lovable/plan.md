@@ -54,9 +54,7 @@ Merge-mot-default före validering är det som faktiskt löser hela "saknat fäl
 - `perTarget`: måste vara ett objekt (annars `{}`); därefter befintlig `sanitizePerTarget` per id — okända id droppas, ogiltig patch → det targetets defaults, övriga target orörda.
 - `split`: merge mot default → `splitSchema` → fel? `DEFAULT.export.split`.
 
-Det är enda strukturella ändringen. `settingsSchema` behålls som är (fortsatt användbart i tester och som dokumentation), men `loadStoredSettings` slutar använda helhetsvarianten som grind. Alternativt exporteras helheten som en ren `composeSettings`-hjälpare så testerna kan köra den direkt.
-
-Rekommenderat att bryta ut logiken till `src/lib/codeplug/settings.load.ts` (ren funktion `loadSettingsFromRaw(raw: unknown): Settings`) så persistensen kan testas utan `renderHook`. Hooken blir tunn. Ingen `STORAGE_KEY`-bump behövs — poängen är just att gamla nycklar ska överleva.
+Det är enda strukturella ändringen. `settingsSchema` behålls som är, men `loadStoredSettings` slutar använda helhetsvarianten som grind (se invändning 5). Filscope enligt invändning 4. Ingen `STORAGE_KEY`-bump — poängen är just att gamla nycklar ska överleva.
 
 ## 3. Regressionsrisker
 
