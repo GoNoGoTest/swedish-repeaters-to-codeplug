@@ -9,23 +9,23 @@ Du har rätt, och min tidigare formulering slog ihop två skilda saker:
 - **`satisfies` tar aldrig bort runtime-fält.** Det är enbart en typkontroll; objektet som byggs är exakt det spreadarna producerar. Ett `{ ...DEFAULT_SETTINGS, ...data, … } satisfies Settings` skulle bevara okända fält i runtime precis som idag.
 - **Det som faktiskt händer är att `satisfies` inte typcheckar.** `data` är `z.infer<typeof settingsSchema>` med passthrough-indexsignatur (`{ [k: string]: unknown }`). Spreadar man in den blir resultattypen inte tilldelningsbar till `Settings` — objektliteral-spread av en indexsignaturtyp gör att TS inte kan garantera att t.ex. `naming` har rätt form, och excess-property-kontrollen mot `Settings` fallerar. Man skulle alltså tvingas till fler `as`, inte färre.
 
-Så: risken med `satisfies` är **kompileringsfriktion som pressar fram omskrivningar**, inte dataförlust i sig. Faran är indirekt — någon "löser" typfelet genom att sluta spreada `data`, och *då* försvinner fälten. Min ursprungliga slutsats (undvik `satisfies` här) står, men av rätt skäl.
+Så: risken med `satisfies` är **kompileringsfriktion som pressar fram omskrivningar**, inte dataförlust i sig. Faran är indirekt — någon "löser" typfelet genom att sluta spreada `data`, och _då_ försvinner fälten. Min ursprungliga slutsats (undvik `satisfies` här) står, men av rätt skäl.
 
 ## 2. Exakt spårning av okända fält genom `loadStoredSettings`
 
 Verifierat rad för rad. Bilden är mer blandad än jag beskrev:
 
-| Nivå | Mekanism | Bevaras? |
-| --- | --- | --- |
-| Toppnivå | `...(data as Partial<Settings>)` | **Ja** — kräver `settingsSchema.passthrough()` |
-| `filter` | `filter: migrated.filter` | **Ja**, men **inte** tack vare `filterSchema`. `migrateFilter` spreadar `parsedFilter`, dvs. den **råa** JSON:en före validering. Schemats passthrough är irrelevant för det här fältet. |
-| `naming` | `{ ...DEFAULT.naming, ...(data.naming) }` | Ja — kräver `namingSchema.passthrough()` |
-| `packs` | `{ ...DEFAULT.packs, ...(data.packs) }` | Ja — kräver `packsSchema.passthrough()` |
-| `sort` | `{ ...DEFAULT.sort, ...(data.sort) }` | Ja — kräver `sortSchema.passthrough()` |
-| `export` (toppnivå i sektionen) | objektet byggs om från `targetId` / `perTarget` / `split` — **`...exportPatch` spreadas aldrig** | **Nej. Okända fält direkt under `export` tappas idag.** `exportSchema.passthrough()` gör här ingen nytta. |
-| `export.split` | `{ ...DEFAULT.split, ...(exportPatch.split) }` | Ja — kräver `splitSchema.passthrough()` |
-| `export.perTarget`, okänt target-id | `sanitizePerTarget` hoppar över | Nej — **avsiktligt** |
-| `export.perTarget[<känt id>]` | `resolveTargetSettings`-mönstret: `defaults + patch` → `t.settingsSchema.safeParse` | Kända fält ja; **okända fält inuti patchen strippas**, eftersom target-scheman (t.ex. `chirpSettingsSchema`) är vanliga `z.object` utan passthrough |
+| Nivå                                | Mekanism                                                                                         | Bevaras?                                                                                                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Toppnivå                            | `...(data as Partial<Settings>)`                                                                 | **Ja** — kräver `settingsSchema.passthrough()`                                                                                                                                           |
+| `filter`                            | `filter: migrated.filter`                                                                        | **Ja**, men **inte** tack vare `filterSchema`. `migrateFilter` spreadar `parsedFilter`, dvs. den **råa** JSON:en före validering. Schemats passthrough är irrelevant för det här fältet. |
+| `naming`                            | `{ ...DEFAULT.naming, ...(data.naming) }`                                                        | Ja — kräver `namingSchema.passthrough()`                                                                                                                                                 |
+| `packs`                             | `{ ...DEFAULT.packs, ...(data.packs) }`                                                          | Ja — kräver `packsSchema.passthrough()`                                                                                                                                                  |
+| `sort`                              | `{ ...DEFAULT.sort, ...(data.sort) }`                                                            | Ja — kräver `sortSchema.passthrough()`                                                                                                                                                   |
+| `export` (toppnivå i sektionen)     | objektet byggs om från `targetId` / `perTarget` / `split` — **`...exportPatch` spreadas aldrig** | **Nej. Okända fält direkt under `export` tappas idag.** `exportSchema.passthrough()` gör här ingen nytta.                                                                                |
+| `export.split`                      | `{ ...DEFAULT.split, ...(exportPatch.split) }`                                                   | Ja — kräver `splitSchema.passthrough()`                                                                                                                                                  |
+| `export.perTarget`, okänt target-id | `sanitizePerTarget` hoppar över                                                                  | Nej — **avsiktligt**                                                                                                                                                                     |
+| `export.perTarget[<känt id>]`       | `resolveTargetSettings`-mönstret: `defaults + patch` → `t.settingsSchema.safeParse`              | Kända fält ja; **okända fält inuti patchen strippas**, eftersom target-scheman (t.ex. `chirpSettingsSchema`) är vanliga `z.object` utan passthrough                                      |
 
 Jag påstod tidigare att passthrough ger round-trip-bevarande generellt. Det stämmer inte: **`export`-sektionen och per-target-patcharna tappar okända fält oavsett passthrough.** Om vi skriver acceptanstester måste de spegla det verkliga beteendet, annars låser vi fast ett påstående som inte gäller.
 
@@ -44,7 +44,7 @@ Passthrough på `filterSchema` har alltså exakt ett kvarvarande syfte: **att en
 
 Verifierat: `STORAGE_KEY = "sk6ba-chirp-settings-v6"` är den enda nyckel koden rör, och ingenstans läses en äldre nyckel. Min formulering "en payload från v5-eran" var missvisande.
 
-Det verkliga legacy-scenariot är: **data som skrevs under v6-nyckeln av en äldre version av appen**, dvs. en gammal *form* under aktuell nyckel. Det är precis vad `migrateFilter` och `migrateNaming` finns för. En äldre nyckel (v5 eller tidigare) är permanent oåtkomlig — de användarna fick redan defaults vid nyckelbytet.
+Det verkliga legacy-scenariot är: **data som skrevs under v6-nyckeln av en äldre version av appen**, dvs. en gammal _form_ under aktuell nyckel. Det är precis vad `migrateFilter` och `migrateNaming` finns för. En äldre nyckel (v5 eller tidigare) är permanent oåtkomlig — de användarna fick redan defaults vid nyckelbytet.
 
 Konsekvens för testerna: legacy-fixtures ska skrivas under `sk6ba-chirp-settings-v6`, inte under en påhittad gammal nyckel.
 
@@ -67,8 +67,9 @@ De unioner som ska assertas (samtliga persisteras och har idag duplicerade liter
 ```ts
 type Assert<T extends true> = T;
 type Eq<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
-type _Collision = Assert<Eq<z.infer<typeof namingSchema>["collisionPolicy"],
-                            NamingSettings["collisionPolicy"]>>;
+type _Collision = Assert<
+  Eq<z.infer<typeof namingSchema>["collisionPolicy"], NamingSettings["collisionPolicy"]>
+>;
 ```
 
 Alternativet med delade `as const`-arrayer gör drift omöjlig men ger en bred diff i models.ts. Rimlig kompromiss: `Eq`-assertions nu; `as const`-konstanter när nästa union ändå ska ändras.
