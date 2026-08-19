@@ -6,6 +6,7 @@ import { parseChannelPackCsv } from "../importers/channel_pack";
 import { runPipeline } from "../pipeline";
 import { DEFAULT_SETTINGS } from "../defaults";
 import type { Settings } from "../models";
+import { classifyChannel } from "../accessModes";
 import { makeChannel } from "./helpers";
 
 const sk6baCsv = readFileSync(resolve(__dirname, "fixtures/sk6ba-sample.csv"), "utf8");
