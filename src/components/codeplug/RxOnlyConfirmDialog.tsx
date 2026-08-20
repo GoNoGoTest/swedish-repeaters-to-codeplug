@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { NormalizedChannel } from "@/lib/codeplug/models";
 import type { RxOnlyPolicy } from "@/lib/codeplug/models";
 
-const CHECKBOX_LABEL = "Jag förstår att jag själv måste verifiera i radion att sändning är spärrad.";
+const CHECKBOX_LABEL =
+  "Jag förstår att jag själv måste verifiera i radion att sändning är spärrad.";
 
 /**
  * Targetspecifikt tillägg. RT Systems Yaesu kan inte uttrycka RX-only i sin
@@ -89,9 +90,7 @@ export function RxOnlyConfirmDialog({
           flygradio, marin VHF och andra tjänster där sändning kan vara olaglig.
         </p>
         <p>{rxOnlyDialogTargetNote(targetId, rxOnlyPolicy)}</p>
-        <p>
-          Kontrollera i radion att PTT är spärrad på dessa kanaler innan du använder dem.
-        </p>
+        <p>Kontrollera i radion att PTT är spärrad på dessa kanaler innan du använder dem.</p>
         <ul className="rounded border border-border bg-muted/40 px-3 py-2 font-mono text-xs">
           {examples.map((c, i) => (
             <li key={i}>{formatExample(c)}</li>

@@ -183,7 +183,6 @@ function Index() {
           return c.warnings.some((w) => w.code === "freq_duplicate");
         case "rxOnly":
           return isRxOnlyChannel(c);
-
       }
     });
   }, [pipeline, statFilter]);
@@ -202,7 +201,6 @@ function Index() {
   const rxOnlyInExport = useMemo(() => collectRxOnly(exportChannels), [exportChannels]);
   const [rxOnlyConfirmOpen, setRxOnlyConfirmOpen] = useState(false);
   const exportButtonRef = useRef<HTMLButtonElement | null>(null);
-
 
   const onFile = useCallback(
     async (file: File) => {
@@ -253,7 +251,6 @@ function Index() {
     setRxOnlyConfirmOpen(false);
     exportButtonRef.current?.focus();
   }, []);
-
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -448,7 +445,6 @@ function Index() {
                         Exportera {target.label} ({exportChannels.length})
                         {willSplit ? " [ZIP]" : ""}
                       </button>
-
                     </div>
                   }
                 >
@@ -576,7 +572,6 @@ function Index() {
           void runExport();
         }}
       />
-
 
       <footer className="border-t border-border mt-12">
         <div className="mx-auto max-w-[1600px] px-6 py-4 text-xs text-muted-foreground">
