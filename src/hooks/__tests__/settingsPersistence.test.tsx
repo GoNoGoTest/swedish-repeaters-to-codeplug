@@ -11,7 +11,7 @@ import "@/lib/codeplug/targets";
  * (inte via `loadStoredSettings`, som är privat) och skriver fixtures under
  * den skarpa nyckeln, eftersom det är den enda nyckel koden läser.
  */
-const STORAGE_KEY = "sk6ba-chirp-settings-v6";
+const STORAGE_KEY = "sk6ba-chirp-settings-v7";
 
 function store(payload: unknown) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
