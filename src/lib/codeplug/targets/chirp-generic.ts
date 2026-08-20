@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ChirpSettings, NormalizedChannel, SplitSettings } from "../models";
 import { exportChirpCsv, chirpDigitalWarnings, resolveChirpMode } from "../exporters/chirp";
 import { registerTarget } from "./registry";
+import { assertTxIntentSerializable } from "../txIntent";
 import { buildSplitFiles } from "./split";
 import type { ExportTarget, HardwareLimits } from "./types";
 
@@ -58,17 +59,21 @@ export const CHIRP_GENERIC_TARGET: ExportTarget<ChirpSettings> = {
     "Standard CHIRP-CSV — öppna i CHIRP och importera till valfri radioimage. Bredast hårdvarustöd.",
   filenameBase: "chirp",
   fileExtension: "csv",
+  txInhibit: "verified_tx_inhibit",
   limits: CHIRP_GENERIC_LIMITS,
   defaultSettings: CHIRP_GENERIC_DEFAULTS,
   settingsSchema: chirpSettingsSchema,
   resolveMaxNameLength: (s) => s.maxLength,
   previewMode: (c, s) => resolveChirpMode(c, s.mode),
   validate: (channels) => chirpDigitalWarnings(channels),
-  export: (channels: NormalizedChannel[], settings: ChirpSettings) => ({
-    filename: "chirp.csv",
-    content: exportChirpCsv(channels, settings),
-    warnings: chirpDigitalWarnings(channels),
-  }),
+  export: (channels: NormalizedChannel[], settings: ChirpSettings) => {
+    assertTxIntentSerializable(channels, "verified_tx_inhibit", "chirp-generic");
+    return {
+      filename: "chirp.csv",
+      content: exportChirpCsv(channels, settings),
+      warnings: chirpDigitalWarnings(channels),
+    };
+  },
   exportMany: (channels: NormalizedChannel[], settings: ChirpSettings, split: SplitSettings) => ({
     files: buildSplitFiles(channels, split, {
       filenameBase: "chirp",

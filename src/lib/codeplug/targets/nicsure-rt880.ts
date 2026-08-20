@@ -4,6 +4,7 @@ import type { NormalizedChannel, Warning } from "../models";
 import { channelSignalMode } from "../modes";
 import { registerTarget } from "./registry";
 import { deriveTxMhz, formatMhzFixed } from "../exporters/shared/frequency";
+import { assertTxIntentSerializable, isTxDisabled } from "../txIntent";
 import { truncateName as sharedTruncateName } from "../exporters/shared/name";
 import type { ExportTarget, HardwareLimits } from "./types";
 
@@ -361,7 +362,7 @@ export function toNicsureRows(
 
     const { mod, unsupported: modUnsupported } = encodeModulation(c);
     if (modUnsupported) unsupported++;
-    const isRxOnly = c.rx_only || !c.tx_allowed;
+    const isRxOnly = isTxDisabled(c);
     if (isRxOnly) rxOnlyCount++;
 
     return {
@@ -426,6 +427,7 @@ export const NICSURE_RT880_TARGET: ExportTarget<NicsureRt880Settings> = {
     "CSV för Nicsures custom firmware till Radtel RT-880. 19 kolumner, frekvenser i MHz, DCS med polaritet, fyra slot-grupper för zonering (bokstäver mappas i RMS-appen).",
   filenameBase: "nicsure-rt880",
   fileExtension: "csv",
+  txInhibit: "verified_tx_inhibit",
   limits: NICSURE_RT880_LIMITS,
   defaultSettings: NICSURE_RT880_DEFAULTS,
   settingsSchema: nicsureRt880SettingsSchema,
@@ -444,6 +446,7 @@ export const NICSURE_RT880_TARGET: ExportTarget<NicsureRt880Settings> = {
   },
   validate: (channels, s) => toNicsureRows(channels, s).warnings,
   export: (channels, s) => {
+    assertTxIntentSerializable(channels, "verified_tx_inhibit", "nicsure-rt880");
     const { csv, warnings } = exportNicsureRt880Csv(channels, s);
     return { filename: "nicsure-rt880.csv", content: csv, warnings };
   },

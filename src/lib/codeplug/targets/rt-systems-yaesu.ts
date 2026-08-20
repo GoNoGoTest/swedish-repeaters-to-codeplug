@@ -3,6 +3,7 @@ import type { NormalizedChannel, SplitSettings, Warning } from "../models";
 import { registerTarget } from "./registry";
 import { buildSplitFiles } from "./split";
 import { deriveTxMhz } from "../exporters/shared/frequency";
+import { assertTxIntentSerializable } from "../txIntent";
 import { truncateName as sharedTruncateName } from "../exporters/shared/name";
 import type { ExportTarget, HardwareLimits } from "./types";
 
@@ -307,6 +308,7 @@ export const RT_SYSTEMS_YAESU_TARGET: ExportTarget<RtSystemsYaesuSettings> = {
     "CSV för RT Systems programmeringsverktyg till Yaesu FTM-510. Stödjer FM och C4FM (Operating Mode FM/DN).",
   filenameBase: "rt-systems-yaesu",
   fileExtension: "csv",
+  txInhibit: "no_tx_inhibit",
   limits: RT_SYSTEMS_YAESU_LIMITS,
   defaultSettings: RT_SYSTEMS_YAESU_DEFAULTS,
   settingsSchema: rtSystemsYaesuSettingsSchema,
@@ -314,17 +316,21 @@ export const RT_SYSTEMS_YAESU_TARGET: ExportTarget<RtSystemsYaesuSettings> = {
   previewMode: (c) => operatingMode(c).mode,
   validate: (channels, s) => exportRtSystemsYaesuCsv(channels, s).warnings,
   export: (channels, s) => {
+    assertTxIntentSerializable(channels, "no_tx_inhibit", "rt-systems-yaesu-generic");
     const { csv, warnings } = exportRtSystemsYaesuCsv(channels, s);
     return { filename: "rt-systems-yaesu.csv", content: csv, warnings };
   },
-  exportMany: (channels: NormalizedChannel[], s: RtSystemsYaesuSettings, split: SplitSettings) => ({
-    files: buildSplitFiles(channels, split, {
-      filenameBase: "rt-systems-yaesu",
-      extension: "csv",
-      renderChunk: (chunk) => exportRtSystemsYaesuCsv(chunk, s).csv,
-    }),
-    warnings: exportRtSystemsYaesuCsv(channels, s).warnings,
-  }),
+  exportMany: (channels: NormalizedChannel[], s: RtSystemsYaesuSettings, split: SplitSettings) => {
+    assertTxIntentSerializable(channels, "no_tx_inhibit", "rt-systems-yaesu-generic");
+    return {
+      files: buildSplitFiles(channels, split, {
+        filenameBase: "rt-systems-yaesu",
+        extension: "csv",
+        renderChunk: (chunk) => exportRtSystemsYaesuCsv(chunk, s).csv,
+      }),
+      warnings: exportRtSystemsYaesuCsv(channels, s).warnings,
+    };
+  },
 };
 
 registerTarget(RT_SYSTEMS_YAESU_TARGET);

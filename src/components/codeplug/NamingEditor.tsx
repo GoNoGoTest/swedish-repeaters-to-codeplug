@@ -71,6 +71,7 @@ function makeExampleChannel(over: Partial<NormalizedChannel>): NormalizedChannel
   const district = over.district ?? "";
   return {
     source_type: "sk6ba",
+    tx_intent: "normal",
     source_row: 0,
     source_id: "ex",
     type: "Repeater",

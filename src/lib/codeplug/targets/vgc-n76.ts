@@ -5,6 +5,7 @@ import { channelSignalMode } from "../modes";
 import { registerTarget } from "./registry";
 import { buildSplitFiles } from "./split";
 import { deriveTxMhz, mhzToHz } from "../exporters/shared/frequency";
+import { assertTxIntentSerializable, isTxDisabled } from "../txIntent";
 import { truncateName } from "../exporters/shared/name";
 import type { ExportTarget, HardwareLimits } from "./types";
 
@@ -266,7 +267,7 @@ export function toVgcN76Rows(
       talk_around: "0",
       pre_de_emph: "0",
       sign: "1",
-      tx_dis: c.duplex === "off" || c.rx_only || !c.tx_allowed ? "1" : "0",
+      tx_dis: isTxDisabled(c) ? "1" : "0",
       bclo: "0",
       mute: "0",
       rx_mod: am ? "1" : "0",
@@ -404,6 +405,7 @@ export const VGC_N76_TARGET: ExportTarget<VgcN76Settings> = {
     "CSV importerbar direkt i VGC:s iOS/Android-app. 8-tecken kanalnamn, 32 kanaler/grupp, integer-Hz frekvenser.",
   filenameBase: "vgc-n76",
   fileExtension: "csv",
+  txInhibit: "verified_tx_inhibit",
   limits: VGC_N76_LIMITS,
   defaultSettings: VGC_N76_DEFAULTS,
   settingsSchema: vgcN76SettingsSchema,
@@ -420,10 +422,12 @@ export const VGC_N76_TARGET: ExportTarget<VgcN76Settings> = {
   },
   validate: (channels, s) => toVgcN76Rows(channels, s).warnings,
   export: (channels, s) => {
+    assertTxIntentSerializable(channels, "verified_tx_inhibit", "vgc-n76");
     const { csv, warnings } = exportVgcN76Csv(channels, s);
     return { filename: "vgc-n76.csv", content: csv, warnings };
   },
   exportMany: (channels: NormalizedChannel[], s: VgcN76Settings, split: SplitSettings) => {
+    assertTxIntentSerializable(channels, "verified_tx_inhibit", "vgc-n76");
     // When APRS slot 32 is reserved, each chunk holds at most 31 user
     // channels (slot 32 = APRS). Cap both the per-district chunkSize and
     // the packs hard cap so the 32nd user channel spills into the next

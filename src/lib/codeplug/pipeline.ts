@@ -10,6 +10,7 @@ import { DEFAULT_PACK_NAMING } from "./defaults";
 import { deriveRegion } from "./region";
 import { parseModes } from "./modes";
 import { applyModeAccessSubset, classifyChannel } from "./accessModes";
+import { applyTxIntent } from "./txIntent";
 
 /**
  * Type-värden i SK6BA-exporten som ligger utanför appens scope
@@ -107,6 +108,8 @@ export function normalize(rows: RawRow[]): NormalizedChannel[] {
 
     return {
       source_type: "sk6ba",
+      // Placeholder — sätts av applyTxIntent() efter RX-only-policyn.
+      tx_intent: "normal" as const,
       source_row: idx + 2,
       source_id: (r.id ?? "").toString(),
       type,
@@ -361,6 +364,11 @@ export function runPipeline(input: PipelineInput): PipelineResult {
   // dessa i normalize() innan mode-expansion, vilket gjorde att en DMR-rad
   // med "CC 1" felaktigt varnades för "saknad analog access".
   combined = applyPostExpansionAccessWarnings(combined);
+
+  // TX-kontraktet: härled sändningsavsikten EN gång, med den effektiva
+  // RX-only-policyn. Targets läser `tx_intent` i stället för att gissa ur
+  // rx_only/tx_allowed/duplex. Källfälten lämnas orörda.
+  combined = applyTxIntent(combined, settings.packs.rxOnlyPolicy);
 
   // Freq dedupe across the whole set
   const dedupe = applyFreqDedupe(combined, settings.packs.freqDupePolicy);

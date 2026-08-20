@@ -3,6 +3,7 @@ import type { NormalizedChannel, SplitSettings, Warning } from "../models";
 import { renderCsv, type RowMapper } from "../exporters/shared/rowMapper";
 import { buildSplitFiles } from "./split";
 import type { ExportTarget, HardwareLimits } from "./types";
+import type { TxInhibitCapability } from "../txIntent";
 
 /**
  * `defineTarget()` is the canonical entry point for a new CSV-based export
@@ -44,6 +45,8 @@ export interface DefineTargetSpec<TSettings, TCols extends string> {
   description?: string;
   fileExtension: string;
   filenameBase?: string;
+  /** Obligatorisk TX-spärr-förmåga, se ExportTarget.txInhibit. */
+  txInhibit: TxInhibitCapability;
   limits: HardwareLimits;
   defaultSettings: TSettings;
   settingsSchema?: z.ZodType<TSettings>;
@@ -70,6 +73,7 @@ export function defineTarget<TSettings, TCols extends string>(
     description: spec.description,
     filenameBase: baseFilename,
     fileExtension: spec.fileExtension,
+    txInhibit: spec.txInhibit,
     limits: spec.limits,
     defaultSettings: spec.defaultSettings,
     settingsSchema: spec.settingsSchema,

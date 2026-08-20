@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { NormalizedChannel, SplitSettings, Warning } from "../models";
+import type { TxInhibitCapability } from "../txIntent";
 
 /**
  * Hardware/software limits for a concrete export target (radio or app).
@@ -67,6 +68,14 @@ export interface ExportTarget<TSettings = unknown> {
   /** Base filename without extension (e.g. "vgc-n76"). Defaults to id. */
   filenameBase?: string;
   fileExtension: "csv" | "txt" | string;
+  /**
+   * OBLIGATORISK deklaration: kan targetets filformat uttrycka en verifierad
+   * TX-spärr? Läses av `resolveEffectiveRxOnlyPolicy()` och av den defensiva
+   * vakten `assertTxIntentSerializable()`. Nya targets tvingas av
+   * kompilatorn att ta ställning — gissa aldrig, verifiera mot formatets
+   * dokumentation eller en referensexport.
+   */
+  txInhibit: TxInhibitCapability;
   limits: HardwareLimits;
   defaultSettings: TSettings;
   /**
