@@ -107,6 +107,8 @@ export function normalize(rows: RawRow[]): NormalizedChannel[] {
 
     return {
       source_type: "sk6ba",
+      // Placeholder — sätts av applyTxIntent() efter RX-only-policyn.
+      tx_intent: "normal" as const,
       source_row: idx + 2,
       source_id: (r.id ?? "").toString(),
       type,

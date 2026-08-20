@@ -197,6 +197,8 @@ export function parseChannelPackCsv(text: string, fileName: string): PackParseRe
 
     const ch: ParsedPackChannel = {
       source_type: "channel_pack",
+      // Härleds i pipelinen (deriveTxIntent) — aldrig persistat i pack-CSV:n.
+      tx_intent: "normal",
       source_row: idx + 2,
       source_id: sourceId,
       type: (r.type ?? "").trim(),

@@ -15,6 +15,7 @@ export function makeChannel(over: Partial<NormalizedChannel> = {}): NormalizedCh
   const region = over.region ?? deriveRegion(district, over.call);
   return {
     source_type: "sk6ba",
+    tx_intent: "normal",
     source_row: 2,
     source_id: "x",
     type: "Repeater",
