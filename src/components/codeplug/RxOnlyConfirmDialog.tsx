@@ -63,6 +63,19 @@ export function RxOnlyConfirmDialog({
 
   if (!open) return null;
 
+  /**
+   * Stäng det native-elementet SYNKRONT medan det fortfarande är monterat.
+   * Föräldern sätter `open=false` i callbacken, vilket avmonterar dialogen —
+   * hinner vi inte anropa close() först lämnas dokumentet i modalt/inert
+   * läge och fokus återställs aldrig. Webbläsaren flyttar själv tillbaka
+   * fokus till elementet som öppnade modalen efter close().
+   */
+  const closeThen = (cb: () => void) => {
+    const el = ref.current;
+    if (el?.open) el.close();
+    cb();
+  };
+
   const count = channels.length;
   const examples = channels.slice(0, 3);
   const rest = Math.max(0, count - examples.length);
