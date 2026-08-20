@@ -251,7 +251,10 @@ describe("loadSettingsFromRaw – sektionsisolering", () => {
   });
 
   it("5. packs utan rxOnlyPolicy fyller bara det fältet", () => {
-    const packs: Record<string, unknown> = { ...DEFAULT_SETTINGS.packs, freqDupePolicy: "drop_pack" };
+    const packs: Record<string, unknown> = {
+      ...DEFAULT_SETTINGS.packs,
+      freqDupePolicy: "drop_pack",
+    };
     delete packs.rxOnlyPolicy;
     const s = loadSettingsFromRaw({ ...base(), packs });
     expect(s.packs.rxOnlyPolicy).toBe(DEFAULT_SETTINGS.packs.rxOnlyPolicy);
@@ -353,7 +356,12 @@ describe("loadSettingsFromRaw – sektionsisolering", () => {
   it("14. filtermigrering gäller även när packs är trasig", () => {
     const s = loadSettingsFromRaw({
       ...base(),
-      filter: { ...DEFAULT_SETTINGS.filter, modes: undefined, modeStrategy: "custom", customModes: ["fm"] },
+      filter: {
+        ...DEFAULT_SETTINGS.filter,
+        modes: undefined,
+        modeStrategy: "custom",
+        customModes: ["fm"],
+      },
       packs: { ...DEFAULT_SETTINGS.packs, freqDupePolicy: "nope" },
     });
     expect(s.filter.modes).toEqual(["FM"]);
