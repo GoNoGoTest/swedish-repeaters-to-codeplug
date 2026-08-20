@@ -217,8 +217,7 @@ function Index() {
   const split = settings.export.split;
   const willSplit = split.mode !== "single" && !!target.exportMany;
 
-  const doExport = async () => {
-    if (!pipeline || pipeline.duplicateStop) return;
+  const runExport = useCallback(async () => {
     const warnings = await exportFiles();
     if (warnings.length) {
       console.info(
@@ -226,7 +225,24 @@ function Index() {
         warnings.map((w) => `[${w.code}] ${w.message}`),
       );
     }
+  }, [exportFiles]);
+
+  const doExport = async () => {
+    if (!pipeline || pipeline.duplicateStop) return;
+    // RX-only i den FAKTISKA exporten (efter policy + manuella exkluderingar)
+    // kräver en aktiv bekräftelse innan någon nedladdning startar.
+    if (rxOnlyInExport.length > 0) {
+      setRxOnlyConfirmOpen(true);
+      return;
+    }
+    await runExport();
   };
+
+  const closeRxOnlyConfirm = useCallback(() => {
+    setRxOnlyConfirmOpen(false);
+    exportButtonRef.current?.focus();
+  }, []);
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
