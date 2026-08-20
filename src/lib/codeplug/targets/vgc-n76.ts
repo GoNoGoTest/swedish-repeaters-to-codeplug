@@ -404,6 +404,7 @@ export const VGC_N76_TARGET: ExportTarget<VgcN76Settings> = {
     "CSV importerbar direkt i VGC:s iOS/Android-app. 8-tecken kanalnamn, 32 kanaler/grupp, integer-Hz frekvenser.",
   filenameBase: "vgc-n76",
   fileExtension: "csv",
+  txInhibit: "verified_tx_inhibit",
   limits: VGC_N76_LIMITS,
   defaultSettings: VGC_N76_DEFAULTS,
   settingsSchema: vgcN76SettingsSchema,

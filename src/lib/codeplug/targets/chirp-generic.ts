@@ -58,6 +58,7 @@ export const CHIRP_GENERIC_TARGET: ExportTarget<ChirpSettings> = {
     "Standard CHIRP-CSV — öppna i CHIRP och importera till valfri radioimage. Bredast hårdvarustöd.",
   filenameBase: "chirp",
   fileExtension: "csv",
+  txInhibit: "verified_tx_inhibit",
   limits: CHIRP_GENERIC_LIMITS,
   defaultSettings: CHIRP_GENERIC_DEFAULTS,
   settingsSchema: chirpSettingsSchema,

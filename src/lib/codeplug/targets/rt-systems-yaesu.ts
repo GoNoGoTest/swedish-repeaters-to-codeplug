@@ -307,6 +307,7 @@ export const RT_SYSTEMS_YAESU_TARGET: ExportTarget<RtSystemsYaesuSettings> = {
     "CSV för RT Systems programmeringsverktyg till Yaesu FTM-510. Stödjer FM och C4FM (Operating Mode FM/DN).",
   filenameBase: "rt-systems-yaesu",
   fileExtension: "csv",
+  txInhibit: "no_tx_inhibit",
   limits: RT_SYSTEMS_YAESU_LIMITS,
   defaultSettings: RT_SYSTEMS_YAESU_DEFAULTS,
   settingsSchema: rtSystemsYaesuSettingsSchema,

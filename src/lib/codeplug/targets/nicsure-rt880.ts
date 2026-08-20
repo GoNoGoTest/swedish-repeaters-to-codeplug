@@ -426,6 +426,7 @@ export const NICSURE_RT880_TARGET: ExportTarget<NicsureRt880Settings> = {
     "CSV för Nicsures custom firmware till Radtel RT-880. 19 kolumner, frekvenser i MHz, DCS med polaritet, fyra slot-grupper för zonering (bokstäver mappas i RMS-appen).",
   filenameBase: "nicsure-rt880",
   fileExtension: "csv",
+  txInhibit: "verified_tx_inhibit",
   limits: NICSURE_RT880_LIMITS,
   defaultSettings: NICSURE_RT880_DEFAULTS,
   settingsSchema: nicsureRt880SettingsSchema,
