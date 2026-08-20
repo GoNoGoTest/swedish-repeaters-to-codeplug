@@ -53,3 +53,17 @@ describe("withEffectiveRxOnlyPolicy", () => {
     }
   });
 });
+
+describe("okänt target failar closed", () => {
+  it("block_tx stöds inte av ett oregistrerat target", () => {
+    expect(targetSupportsRxOnlyPolicy("does-not-exist", "block_tx")).toBe(false);
+    expect(resolveEffectiveRxOnlyPolicy("does-not-exist", "block_tx")).toBe("skip");
+  });
+
+  it("mark/skip fungerar fortfarande för okänt target", () => {
+    for (const p of ["mark", "skip"] as const) {
+      expect(targetSupportsRxOnlyPolicy("does-not-exist", p)).toBe(true);
+      expect(resolveEffectiveRxOnlyPolicy("does-not-exist", p)).toBe(p);
+    }
+  });
+});

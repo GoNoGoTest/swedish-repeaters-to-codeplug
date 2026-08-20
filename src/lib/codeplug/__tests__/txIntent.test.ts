@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { runPipeline } from "../pipeline";
 import { DEFAULT_SETTINGS } from "../defaults";
-import type { NormalizedChannel, RawRow, Settings } from "../models";
+import type { NormalizedChannel, RawRow, Settings, SplitSettings } from "../models";
 import { makeChannel, makePackChannel } from "./helpers";
 import {
   assertTxIntentSerializable,
@@ -10,6 +10,7 @@ import {
   TxIntentCapabilityError,
 } from "../txIntent";
 import { listTargets, requireTarget } from "../targets";
+import { defineTarget } from "../targets/defineTarget";
 import { isRxOnlyChannel } from "../rxOnly";
 import { CHIRP_GENERIC_DEFAULTS } from "../targets/chirp-generic";
 import { exportChirpCsv } from "../exporters/chirp";
@@ -207,6 +208,99 @@ describe("must_block_tx vinner över avvikande tx_frequency", () => {
 
   it("Nicsure sätter TX_Power=N/T och TX=RX", () => {
     const { csv } = exportNicsureRt880Csv([conflict], NICSURE_RT880_DEFAULTS);
+    const cols = csv.split("\r\n")[1].split(",");
+    expect(cols[3]).toBe(cols[4]);
+    expect(cols[7]).toBe("N/T");
+  });
+});
+
+describe("defineTarget() automatisk vakt", () => {
+  const synthetic = defineTarget<{ maxLength: number }, "Name" | "RX">({
+    id: "synthetic-no-inhibit",
+    label: "Syntetiskt target utan TX-spärr",
+    vendor: "Test",
+    fileExtension: "csv",
+    txInhibit: "no_tx_inhibit",
+    limits: {
+      maxNameLength: 8,
+      supportedModes: ["FM"],
+      supportsSplit: false,
+      supportsCtcss: true,
+      supportsDcs: false,
+    },
+    defaultSettings: { maxLength: 8 },
+    splitEnabled: true,
+    mapper: {
+      columns: ["Name", "RX"] as const,
+      toRow: (c) => ({ Name: c.generated_name_final, RX: String(c.rx_frequency ?? "") }),
+    },
+  });
+  const split = { mode: "off", chunkSize: 500 } as unknown as SplitSettings;
+
+  const blocked = makeChannel({
+    tx_intent: "must_block_tx",
+    rx_only: true,
+    duplex: "off",
+    generated_name_final: "BLOCK",
+  });
+  const marked = makeChannel({
+    tx_intent: "best_effort_rx_only",
+    rx_only: true,
+    duplex: "",
+    offset: 0,
+    generated_name_final: "MARK",
+  });
+
+  it("export() kastar för must_block_tx", () => {
+    expect(() => synthetic.export([blocked], synthetic.defaultSettings)).toThrow(
+      TxIntentCapabilityError,
+    );
+  });
+
+  it("exportMany() kastar för must_block_tx", () => {
+    expect(() => synthetic.exportMany!([blocked], synthetic.defaultSettings, split)).toThrow(
+      TxIntentCapabilityError,
+    );
+  });
+
+  it("best_effort_rx_only tillåts i båda vägarna", () => {
+    expect(synthetic.export([marked], synthetic.defaultSettings).content).toContain("MARK");
+    expect(
+      synthetic.exportMany!([marked], synthetic.defaultSettings, split).files[0].content,
+    ).toContain("MARK");
+  });
+});
+
+describe("CHIRP manuell exportMany följer kontraktet", () => {
+  it("no-op för verifierad capability", () => {
+    const c = makeChannel({ tx_intent: "must_block_tx", rx_only: true, duplex: "off" });
+    const target = requireTarget("chirp-generic");
+    expect(() =>
+      target.exportMany!(
+        [c],
+        CHIRP_GENERIC_DEFAULTS as never,
+        {
+          mode: "off",
+          chunkSize: 500,
+        } as unknown as SplitSettings,
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe("Nicsure TX=RX styrs av isTxDisabled", () => {
+  it("enbart tx_intent=must_block_tx, utan källflaggor och med motstridig tx_frequency", () => {
+    const c = makeChannel({
+      tx_intent: "must_block_tx",
+      rx_only: false,
+      tx_allowed: true,
+      duplex: "-",
+      offset: 0.6,
+      rx_frequency: 145.6,
+      tx_frequency: 431.0,
+      generated_name_final: "CONFLICT",
+    });
+    const { csv } = exportNicsureRt880Csv([c], NICSURE_RT880_DEFAULTS);
     const cols = csv.split("\r\n")[1].split(",");
     expect(cols[3]).toBe(cols[4]);
     expect(cols[7]).toBe("N/T");

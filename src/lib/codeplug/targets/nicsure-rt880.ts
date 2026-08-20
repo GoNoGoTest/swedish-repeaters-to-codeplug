@@ -118,9 +118,11 @@ function truncateName(raw: string, maxLen: number): { name: string; truncated: b
 
 /** Mobile-side TX frequency in MHz, or null. */
 function mobileTxMhz(c: NormalizedChannel): number | null {
-  // RX-only channels: TX_Power column carries the "N/T" signal; TX frequency
-  // mirrors RX (radio convention — no offset, no zero-frequency placeholder).
-  if (c.rx_only || !c.tx_allowed) return c.rx_frequency;
+  // TX-spärrade kanaler: TX_Power-kolumnen bär "N/T"-signalen och TX-frekvensen
+  // speglar RX (radiokonvention — ingen offset, ingen nollfrekvens). Avgörs av
+  // `isTxDisabled()` (tx_intent-kontraktet), inte av källflaggorna direkt, så
+  // TX=RX och TX_Power=N/T alltid följs åt.
+  if (isTxDisabled(c)) return c.rx_frequency;
   return deriveTxMhz(c);
 }
 
