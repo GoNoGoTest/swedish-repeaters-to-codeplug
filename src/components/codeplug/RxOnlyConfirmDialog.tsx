@@ -11,6 +11,7 @@ const CHECKBOX_LABEL =
  * targets skriver någon form av spärr, men appen kan ändå inte lova något
  * om importverktyget eller radion.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function rxOnlyDialogTargetNote(targetId: string, rxOnlyPolicy: RxOnlyPolicy): string {
   if (targetId === "rt-systems-yaesu-generic" && rxOnlyPolicy === "mark") {
     return (
