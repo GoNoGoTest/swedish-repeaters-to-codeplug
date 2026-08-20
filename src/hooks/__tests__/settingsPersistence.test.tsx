@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { useCodeplugSettings } from "../useCodeplugSettings";
+import { useCodeplugSettings, loadSettingsFromRaw } from "../useCodeplugSettings";
 import { DEFAULT_SETTINGS } from "@/lib/codeplug/defaults";
+import { settingsSchema } from "@/lib/codeplug/settings.schema";
 import { CHIRP_GENERIC_DEFAULTS } from "@/lib/codeplug/targets/chirp-generic";
 import "@/lib/codeplug/targets";
 
