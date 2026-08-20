@@ -57,15 +57,16 @@ export function RxOnlyExportNote({
   // pre-policy-källan.
   void rxOnlyPolicy;
   void targetId;
-  const hasRxOnly = channels.some((c) => c.rx_only || !c.tx_allowed);
-  if (!hasRxOnly) return null;
+  const rxOnlyCount = channels.filter(isRxOnlyChannel).length;
+  if (rxOnlyCount === 0) return null;
   return (
     <p className="mt-2 rounded-md border border-amber-400/40 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
-      Du exporterar kanaler som är RX-only — verifiera i din radio att du inte kan sända på dessa
-      kanaler.
+      Du exporterar <strong>{rxOnlyCount}</strong> {rxOnlyCount === 1 ? "kanal" : "kanaler"} som är
+      RX-only — verifiera i din radio att du inte kan sända på dessa kanaler.
     </p>
   );
 }
+
 
 export function RtSystemsRxOnlySkippedNote({
   sourceHasRxOnly,

@@ -565,6 +565,19 @@ function Index() {
         </div>
       </main>
 
+      <RxOnlyConfirmDialog
+        open={rxOnlyConfirmOpen}
+        channels={rxOnlyInExport}
+        targetId={settings.export.targetId}
+        rxOnlyPolicy={settings.packs.rxOnlyPolicy}
+        onCancel={closeRxOnlyConfirm}
+        onConfirm={() => {
+          closeRxOnlyConfirm();
+          void runExport();
+        }}
+      />
+
+
       <footer className="border-t border-border mt-12">
         <div className="mx-auto max-w-[1600px] px-6 py-4 text-xs text-muted-foreground">
           Verktyget skapar codeplug-CSV för CHIRP eller direktimport i radions egen app (t.ex. VGC
