@@ -15,7 +15,7 @@ import { CHIRP_GENERIC_DEFAULTS } from "../targets/chirp-generic";
 import { exportChirpCsv } from "../exporters/chirp";
 import { exportVgcN76Csv, VGC_N76_DEFAULTS } from "../targets/vgc-n76";
 import { exportNicsureRt880Csv, NICSURE_RT880_DEFAULTS } from "../targets/nicsure-rt880";
-import { RT_SYSTEMS_YAESU_DEFAULTS } from "../targets/rt-systems-yaesu";
+import { RT_SYSTEMS_YAESU_DEFAULTS, RT_SYSTEMS_YAESU_TARGET } from "../targets/rt-systems-yaesu";
 
 const base: Settings = {
   ...DEFAULT_SETTINGS,
@@ -153,7 +153,7 @@ describe("defensiv vakt", () => {
 
   it("no_tx_inhibit-target kan inte serialisera must_block_tx", () => {
     expect(() =>
-      requireTarget("rt-systems-yaesu-generic").export([blocked], RT_SYSTEMS_YAESU_DEFAULTS),
+      RT_SYSTEMS_YAESU_TARGET.export([blocked], RT_SYSTEMS_YAESU_DEFAULTS),
     ).toThrow(TxIntentCapabilityError);
   });
 
@@ -169,10 +169,7 @@ describe("defensiv vakt", () => {
       rx_only: true,
       generated_name_final: "MARIN16",
     });
-    const res = requireTarget("rt-systems-yaesu-generic").export(
-      [marked],
-      RT_SYSTEMS_YAESU_DEFAULTS,
-    );
+    const res = RT_SYSTEMS_YAESU_TARGET.export([marked], RT_SYSTEMS_YAESU_DEFAULTS);
     expect(res.content).toContain("Simplex");
   });
 });
