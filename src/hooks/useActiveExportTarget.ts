@@ -9,6 +9,7 @@ import type {
 import { assertNever } from "@/lib/codeplug/assertNever";
 import { type AnyExportTarget, requireTarget, resolveTargetSettings } from "@/lib/codeplug/targets";
 import type { ExportTarget } from "@/lib/codeplug/targets/types";
+import { targetSupportsRxOnlyPolicy } from "@/lib/codeplug/rxOnlyPolicy";
 
 /**
  * Bundle med target-relaterade deriveringar som tidigare låg utspridda i
