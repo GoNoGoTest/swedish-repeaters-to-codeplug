@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { z } from "zod";
 import type { Settings } from "@/lib/codeplug/models";
 import { DEFAULT_SETTINGS } from "@/lib/codeplug/defaults";
 
@@ -6,7 +7,14 @@ const STORAGE_KEY = "sk6ba-chirp-settings-v6";
 
 import { parseModes } from "@/lib/codeplug/modes";
 import { getTarget } from "@/lib/codeplug/targets";
-import { settingsSchema } from "@/lib/codeplug/settings.schema";
+import {
+  filterSchema,
+  namingSchema,
+  packsSchema,
+  settingsSchema,
+  sortSchema,
+  splitSchema,
+} from "@/lib/codeplug/settings.schema";
 
 function migrateFilter(
   parsedFilter: Record<string, unknown> | undefined | null,
