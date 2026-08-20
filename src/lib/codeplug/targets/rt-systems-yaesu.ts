@@ -328,8 +328,10 @@ export const RT_SYSTEMS_YAESU_TARGET: ExportTarget<RtSystemsYaesuSettings> = {
       extension: "csv",
       renderChunk: (chunk) => exportRtSystemsYaesuCsv(chunk, s).csv,
     }),
-    warnings: exportRtSystemsYaesuCsv(channels, s).warnings,
-  }),
+      warnings: exportRtSystemsYaesuCsv(channels, s).warnings,
+    };
+  },
+
 };
 
 registerTarget(RT_SYSTEMS_YAESU_TARGET);
