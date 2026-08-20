@@ -63,6 +63,19 @@ export function RxOnlyConfirmDialog({
 
   if (!open) return null;
 
+  /**
+   * Stäng det native-elementet SYNKRONT medan det fortfarande är monterat.
+   * Föräldern sätter `open=false` i callbacken, vilket avmonterar dialogen —
+   * hinner vi inte anropa close() först lämnas dokumentet i modalt/inert
+   * läge och fokus återställs aldrig. Webbläsaren flyttar själv tillbaka
+   * fokus till elementet som öppnade modalen efter close().
+   */
+  const closeThen = (cb: () => void) => {
+    const el = ref.current;
+    if (el?.open) el.close();
+    cb();
+  };
+
   const count = channels.length;
   const examples = channels.slice(0, 3);
   const rest = Math.max(0, count - examples.length);
@@ -76,7 +89,7 @@ export function RxOnlyConfirmDialog({
         // Escape: låt inte webbläsaren stänga tyst — kör vår avbryt-väg så
         // att fokus återgår till exportknappen.
         e.preventDefault();
-        onCancel();
+        closeThen(onCancel);
       }}
       className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-lg border border-border bg-card p-5 text-foreground backdrop:bg-black/50"
     >
@@ -113,14 +126,14 @@ export function RxOnlyConfirmDialog({
       <div className="mt-5 flex justify-end gap-2">
         <button
           type="button"
-          onClick={onCancel}
+          onClick={() => closeThen(onCancel)}
           className="rounded border border-border px-3 py-1.5 text-sm"
         >
           Avbryt
         </button>
         <button
           type="button"
-          onClick={onConfirm}
+          onClick={() => closeThen(onConfirm)}
           disabled={!acknowledged}
           className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >

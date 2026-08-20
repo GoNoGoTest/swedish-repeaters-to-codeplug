@@ -210,6 +210,70 @@ describe("RX-only-bekräftelse före export", () => {
     expect(screen.getByText("+ 1 till")).toBeTruthy();
   });
 
+  it("stänger native-dialogen innan avbryt-callbacken körs", async () => {
+    const order: string[] = [];
+    render(<ExportHarness exportChannels={[rxOnlyChannel("AIR-1", 118.1)]} />);
+    await clickExport();
+    const dialog = document.querySelector("dialog")!;
+    const realClose = HTMLDialogElement.prototype.close;
+    const closeSpy = vi.fn(function (this: HTMLDialogElement) {
+      order.push("close");
+      realClose.call(this);
+    });
+    dialog.close = closeSpy as unknown as HTMLDialogElement["close"];
+    dialog.addEventListener("close", () => order.push("close-event"));
+    const btn = screen.getByRole("button", { name: "Exportera" });
+    btn.addEventListener("focus", () => order.push("focus"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Avbryt" }));
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect(order[0]).toBe("close");
+    expect(order).toContain("focus");
+    expect(dialog.open).toBe(false);
+    expect(document.activeElement).toBe(btn);
+    expect(clickSpy).not.toHaveBeenCalled();
+  });
+
+  it("stänger native-dialogen innan bekräftelse-callbacken körs", async () => {
+    const order: string[] = [];
+    render(<ExportHarness exportChannels={[rxOnlyChannel("AIR-1", 118.1)]} />);
+    await clickExport();
+    const dialog = document.querySelector("dialog")!;
+    const realClose = HTMLDialogElement.prototype.close;
+    dialog.close = vi.fn(function (this: HTMLDialogElement) {
+      order.push("close");
+      realClose.call(this);
+    }) as unknown as HTMLDialogElement["close"];
+    clickSpy.mockImplementation(() => {
+      order.push("download");
+    });
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(confirmButton());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(order[0]).toBe("close");
+    expect(order).toContain("download");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Exportera" }));
+  });
+
+  it("Escape stänger native-dialogen innan avbryt-callbacken körs", async () => {
+    const order: string[] = [];
+    render(<ExportHarness exportChannels={[rxOnlyChannel("AIR-1", 118.1)]} />);
+    await clickExport();
+    const dialog = document.querySelector("dialog")!;
+    const realClose = HTMLDialogElement.prototype.close;
+    dialog.close = vi.fn(function (this: HTMLDialogElement) {
+      order.push("close");
+      realClose.call(this);
+    }) as unknown as HTMLDialogElement["close"];
+
+    fireEvent(dialog, new Event("cancel", { bubbles: false, cancelable: true }));
+    expect(order[0]).toBe("close");
+    expect(dialog.open).toBe(false);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Exportera" }));
+    expect(clickSpy).not.toHaveBeenCalled();
+  });
+
   it("RT Systems + mark får den skarpare texten", async () => {
     const settings: Settings = {
       ...DEFAULT_SETTINGS,
