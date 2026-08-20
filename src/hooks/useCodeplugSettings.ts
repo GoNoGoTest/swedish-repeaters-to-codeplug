@@ -235,8 +235,19 @@ export function loadSettingsFromRaw(raw: unknown): Settings {
   return result;
 }
 
+function dropLegacyStorage(): void {
+  for (const key of LEGACY_STORAGE_KEYS) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 function loadStoredSettings(): Settings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
+  dropLegacyStorage();
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
