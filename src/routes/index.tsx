@@ -164,7 +164,7 @@ function Index() {
     for (const c of exportChannels) {
       if (c.warnings.some((w) => w.code !== "name_collision")) warned++;
       if (c.collided) collided++;
-      if (c.rx_only) rxOnly++;
+      if (isRxOnlyChannel(c)) rxOnly++;
       if (c.warnings.some((w) => w.code === "freq_duplicate")) dupes++;
     }
     return { warned, collided, rxOnly, dupes };
@@ -182,7 +182,8 @@ function Index() {
         case "dupes":
           return c.warnings.some((w) => w.code === "freq_duplicate");
         case "rxOnly":
-          return c.rx_only;
+          return isRxOnlyChannel(c);
+
       }
     });
   }, [pipeline, statFilter]);
@@ -439,6 +440,7 @@ function Index() {
                         Varningar
                       </button>
                       <button
+                        ref={exportButtonRef}
                         onClick={doExport}
                         disabled={pipeline.duplicateStop}
                         className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
@@ -446,6 +448,7 @@ function Index() {
                         Exportera {target.label} ({exportChannels.length})
                         {willSplit ? " [ZIP]" : ""}
                       </button>
+
                     </div>
                   }
                 >
