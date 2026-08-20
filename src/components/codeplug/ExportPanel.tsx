@@ -23,6 +23,8 @@ import {
 } from "@/lib/codeplug/targets/nicsure-rt880";
 import { requireTarget } from "@/lib/codeplug/targets";
 import { isValidMaidenhead } from "@/lib/codeplug/maidenhead";
+import { isRxOnlyChannel } from "@/lib/codeplug/rxOnly";
+
 import { Field, Hint, NumberField, SectionLabel } from "./common";
 
 // eslint-disable-next-line react-refresh/only-export-components
