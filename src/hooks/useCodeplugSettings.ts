@@ -89,45 +89,146 @@ export function migrateNaming(
   return { ...parsedNaming, collisionPolicy: "numeric_suffix" };
 }
 
+/** Vanligt objekt: inte null, inte array. Arrayer/primitiver är aldrig sektioner. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Sektionsvis grind: shallow-merga sparad sektion ovanpå defaults och validera
+ * *bara* den sektionen. Saknade fält fylls från defaults (äldre payload är inte
+ * ett fel), medan ett närvarande men ogiltigt värde ger sektionens default —
+ * utan att röra syskonsektionerna.
+ */
+function parseSection<T>(
+  name: string,
+  stored: unknown,
+  fallback: T,
+  schema: z.ZodTypeAny,
+  premerged?: Record<string, unknown>,
+): T {
+  if (stored !== undefined && !isPlainObject(stored)) {
+    console.warn(`Sparad sektion "${name}" har fel form, använder defaults`);
+    return fallback;
+  }
+  const merged = premerged ?? { ...(fallback as object), ...(stored ?? {}) };
+  const parsed = schema.safeParse(merged);
+  if (!parsed.success) {
+    console.warn(`Sparad sektion "${name}" ogiltig, använder defaults`, parsed.error.format());
+    return fallback;
+  }
+  return parsed.data as T;
+}
+
+/**
+ * `export` delas upp i tre oberoende delar så att t.ex. en trasig `split` inte
+ * tar med sig ett fullt giltigt `targetId` eller `perTarget` i fallet.
+ */
+function parseExport(stored: unknown): Settings["export"] {
+  if (stored !== undefined && !isPlainObject(stored)) {
+    console.warn('Sparad sektion "export" har fel form, använder defaults');
+    return {
+      targetId: DEFAULT_SETTINGS.export.targetId,
+      perTarget: { ...DEFAULT_SETTINGS.export.perTarget },
+      split: { ...DEFAULT_SETTINGS.export.split },
+    };
+  }
+  const patch = stored ?? {};
+  const targetIdRaw = patch.targetId;
+  const targetId =
+    typeof targetIdRaw === "string" && getTarget(targetIdRaw)
+      ? targetIdRaw
+      : DEFAULT_SETTINGS.export.targetId;
+  const perTarget = isPlainObject(patch.perTarget) ? sanitizePerTarget(patch.perTarget) : {};
+  const split = parseSection(
+    "export.split",
+    patch.split,
+    DEFAULT_SETTINGS.export.split,
+    splitSchema,
+  );
+  const rest = { ...patch };
+  delete rest.targetId;
+  delete rest.perTarget;
+  delete rest.split;
+  return {
+    ...(rest as object),
+    targetId,
+    perTarget: { ...DEFAULT_SETTINGS.export.perTarget, ...perTarget },
+    split,
+  } as Settings["export"];
+}
+
+/**
+ * Ren, testbar loader. Sektionsvis migrera → merga → validera → sektionsdefault.
+ * Ingen helhetsfallback efter sammansättningen: ett fel i en sektion får aldrig
+ * kasta bort en annan.
+ */
+export function loadSettingsFromRaw(raw: unknown): Settings {
+  if (!isPlainObject(raw)) return DEFAULT_SETTINGS;
+
+  const filter = parseSection(
+    "filter",
+    raw.filter,
+    DEFAULT_SETTINGS.filter,
+    filterSchema,
+    migrateFilter(raw.filter as never) as unknown as Record<string, unknown>,
+  );
+
+  const namingStored = migrateNaming(raw.naming as never);
+  const namingMerged = isPlainObject(namingStored)
+    ? {
+        ...DEFAULT_SETTINGS.naming,
+        ...namingStored,
+        // Shallow — aldrig djup map-merge: type/network/band är användarstyrda.
+        abbreviations: isPlainObject(namingStored.abbreviations)
+          ? { ...DEFAULT_SETTINGS.naming.abbreviations, ...namingStored.abbreviations }
+          : { ...DEFAULT_SETTINGS.naming.abbreviations },
+      }
+    : undefined;
+  const naming = parseSection(
+    "naming",
+    raw.naming,
+    DEFAULT_SETTINGS.naming,
+    namingSchema,
+    namingMerged,
+  );
+
+  const sort = parseSection("sort", raw.sort, DEFAULT_SETTINGS.sort, sortSchema);
+  const packs = parseSection("packs", raw.packs, DEFAULT_SETTINGS.packs, packsSchema);
+  const exportSettings = parseExport(raw.export);
+
+  const rest = { ...raw };
+  delete rest.filter;
+  delete rest.naming;
+  delete rest.sort;
+  delete rest.packs;
+  delete rest.export;
+
+  const result = {
+    ...rest,
+    filter,
+    naming,
+    sort,
+    packs,
+    export: exportSettings,
+  } as Settings;
+
+  if (import.meta.env?.DEV) {
+    const check = settingsSchema.safeParse(result);
+    if (!check.success) {
+      // Programmeringsfel — larma, men returnera ändå (ingen totalfallback).
+      console.error("Sammansatta inställningar bryter mot schemat", check.error.format());
+    }
+  }
+  return result;
+}
+
 function loadStoredSettings(): Settings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const migrated = {
-      ...parsed,
-      filter: migrateFilter(parsed?.filter as never),
-      naming: migrateNaming(parsed?.naming as never),
-    };
-    const check = settingsSchema.safeParse(migrated);
-    if (!check.success) {
-      console.warn("Sparade inställningar ogiltiga, återställer defaults", check.error.format());
-      return DEFAULT_SETTINGS;
-    }
-    const data = check.data as Record<string, unknown>;
-    const exportPatch = (data.export as Record<string, unknown>) ?? {};
-    const perTargetRaw = (exportPatch.perTarget as Record<string, unknown>) ?? {};
-    const perTarget = sanitizePerTarget(perTargetRaw);
-    const targetIdRaw = exportPatch.targetId as string | undefined;
-    const targetId =
-      targetIdRaw && getTarget(targetIdRaw) ? targetIdRaw : DEFAULT_SETTINGS.export.targetId;
-    return {
-      ...DEFAULT_SETTINGS,
-      ...(data as Partial<Settings>),
-      filter: migrated.filter as Settings["filter"],
-      naming: { ...DEFAULT_SETTINGS.naming, ...((data.naming as object) ?? {}) },
-      packs: { ...DEFAULT_SETTINGS.packs, ...((data.packs as object) ?? {}) },
-      sort: { ...DEFAULT_SETTINGS.sort, ...((data.sort as object) ?? {}) },
-      export: {
-        targetId,
-        perTarget: { ...DEFAULT_SETTINGS.export.perTarget, ...perTarget },
-        split: {
-          ...DEFAULT_SETTINGS.export.split,
-          ...((exportPatch.split as object) ?? {}),
-        },
-      },
-    };
+    return loadSettingsFromRaw(JSON.parse(raw));
   } catch {
     return DEFAULT_SETTINGS;
   }
