@@ -1,6 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NormalizedChannel } from "@/lib/codeplug/models";
+import { collectRxOnly, isRxOnlyChannel } from "@/lib/codeplug/rxOnly";
+import { RxOnlyConfirmDialog } from "@/components/codeplug/RxOnlyConfirmDialog";
+
 import { useActiveExportTarget } from "@/hooks/useActiveExportTarget";
 import { loadSk6baCsv, type Sk6baLoadState } from "@/lib/codeplug/importers/sk6ba";
 import { useCodeplugSettings } from "@/hooks/useCodeplugSettings";
@@ -161,7 +164,7 @@ function Index() {
     for (const c of exportChannels) {
       if (c.warnings.some((w) => w.code !== "name_collision")) warned++;
       if (c.collided) collided++;
-      if (c.rx_only) rxOnly++;
+      if (isRxOnlyChannel(c)) rxOnly++;
       if (c.warnings.some((w) => w.code === "freq_duplicate")) dupes++;
     }
     return { warned, collided, rxOnly, dupes };
@@ -179,7 +182,7 @@ function Index() {
         case "dupes":
           return c.warnings.some((w) => w.code === "freq_duplicate");
         case "rxOnly":
-          return c.rx_only;
+          return isRxOnlyChannel(c);
       }
     });
   }, [pipeline, statFilter]);
@@ -192,6 +195,12 @@ function Index() {
   };
 
   const { exportFiles, exportWarnings } = useCodeplugDownload({ settings, exportChannels });
+
+  // RX-only-kanaler som faktiskt hamnar i filen. Samma predikat används av
+  // statistiken och den passiva bannern.
+  const rxOnlyInExport = useMemo(() => collectRxOnly(exportChannels), [exportChannels]);
+  const [rxOnlyConfirmOpen, setRxOnlyConfirmOpen] = useState(false);
+  const exportButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const onFile = useCallback(
     async (file: File) => {
@@ -217,8 +226,7 @@ function Index() {
   const split = settings.export.split;
   const willSplit = split.mode !== "single" && !!target.exportMany;
 
-  const doExport = async () => {
-    if (!pipeline || pipeline.duplicateStop) return;
+  const runExport = useCallback(async () => {
     const warnings = await exportFiles();
     if (warnings.length) {
       console.info(
@@ -226,7 +234,23 @@ function Index() {
         warnings.map((w) => `[${w.code}] ${w.message}`),
       );
     }
+  }, [exportFiles]);
+
+  const doExport = async () => {
+    if (!pipeline || pipeline.duplicateStop) return;
+    // RX-only i den FAKTISKA exporten (efter policy + manuella exkluderingar)
+    // kräver en aktiv bekräftelse innan någon nedladdning startar.
+    if (rxOnlyInExport.length > 0) {
+      setRxOnlyConfirmOpen(true);
+      return;
+    }
+    await runExport();
   };
+
+  const closeRxOnlyConfirm = useCallback(() => {
+    setRxOnlyConfirmOpen(false);
+    exportButtonRef.current?.focus();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -413,6 +437,7 @@ function Index() {
                         Varningar
                       </button>
                       <button
+                        ref={exportButtonRef}
                         onClick={doExport}
                         disabled={pipeline.duplicateStop}
                         className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
@@ -535,6 +560,18 @@ function Index() {
           )}
         </div>
       </main>
+
+      <RxOnlyConfirmDialog
+        open={rxOnlyConfirmOpen}
+        channels={rxOnlyInExport}
+        targetId={settings.export.targetId}
+        rxOnlyPolicy={settings.packs.rxOnlyPolicy}
+        onCancel={closeRxOnlyConfirm}
+        onConfirm={() => {
+          closeRxOnlyConfirm();
+          void runExport();
+        }}
+      />
 
       <footer className="border-t border-border mt-12">
         <div className="mx-auto max-w-[1600px] px-6 py-4 text-xs text-muted-foreground">

@@ -12,8 +12,8 @@ appen faktiskt kan adressera — att användaren inte vet att TX-spärr är en
 radioegenskap, inte en filegenskap. Den är särskilt motiverad för RT Systems,
 där formatet inte kan uttrycka RX-only alls.
 
-Invändning som bör respekteras: en modal kan ge *falsk trygghet i motsatt
-riktning* — "jag klickade OK, alltså är det hanterat". Motmedel:
+Invändning som bör respekteras: en modal kan ge _falsk trygghet i motsatt
+riktning_ — "jag klickade OK, alltså är det hanterat". Motmedel:
 
 - Texten får aldrig påstå att appen spärrar något.
 - Modalen ersätter inte fas 1–3 (intern TX-invariant). Den bör beskrivas i
@@ -36,7 +36,7 @@ export function collectRxOnly(channels: NormalizedChannel[]): NormalizedChannel[
 
 Trigger = `collectRxOnly(exportChannels).length > 0`.
 
-`exportChannels` är rätt källa: den är efter pipeline-policy *och* efter manuella
+`exportChannels` är rätt källa: den är efter pipeline-policy _och_ efter manuella
 exkluderingar. Vid `rxOnlyPolicy=skip` finns raderna inte kvar → ingen dialog.
 
 Notera konsekvens av att ta med `duplex === "off"`: en SK6BA-rad som av annan
@@ -131,12 +131,12 @@ Tillgänglighet:
 
 Enhetstester för predikatet (`src/lib/codeplug/__tests__/rxOnly.test.ts`):
 
-| Fall | Förväntat |
-| --- | --- |
-| `rx_only=true` | true |
-| `tx_allowed=false`, `rx_only=false` | true |
-| `duplex="off"` | true |
-| vanlig repeater | false |
+| Fall                                | Förväntat |
+| ----------------------------------- | --------- |
+| `rx_only=true`                      | true      |
+| `tx_allowed=false`, `rx_only=false` | true      |
+| `duplex="off"`                      | true      |
+| vanlig repeater                     | false     |
 
 Komponent-/integrationstester (`src/routes/__tests__` eller
 `src/components/codeplug/__tests__/RxOnlyConfirmDialog.test.tsx`, med mockad
@@ -160,7 +160,7 @@ Regressionsvakt: inga snapshot-ändringar i `src/lib/codeplug/__tests__/targets/
 
 ## 8. Ska den passiva bannern vara kvar?
 
-Ja, men justerad. Bannern har ett annat jobb: den syns *innan* användaren klickar
+Ja, men justerad. Bannern har ett annat jobb: den syns _innan_ användaren klickar
 och kan påverka policyvalet. Två ändringar:
 
 - Byt dess `c.rx_only || !c.tx_allowed`-check mot den nya `isRxOnlyChannel`, så
