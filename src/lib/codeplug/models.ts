@@ -235,8 +235,28 @@ export type NormalizedChannel = ChannelSource &
   ChannelNaming & {
     /** Free-text per-row note. Used by both SK6BA and pack rows. */
     comment: string;
+    /**
+     * Explicit, härlett (aldrig persistat) besked om sändningsavsikten.
+     * Sätts av pipelinen via `deriveTxIntent()` och är det ENDA en
+     * exporter ska läsa för att avgöra om TX ska spärras. Källfälten
+     * (`rx_only`, `tx_allowed`, `duplex`, `tx_shift`, `tx_frequency`)
+     * lämnas oförändrade så att raden fortfarande går att förklara.
+     */
+    tx_intent: TxIntent;
     warnings: Warning[];
   };
+
+/**
+ * Kontrakt mellan pipeline och targetserialisering:
+ *  - `normal`: vanlig kanal, TX tillåten enligt kanalens frekvensdata.
+ *  - `best_effort_rx_only`: RX-only-avsikt; targetet använder sin bästa
+ *    kända representation (t.ex. "RX-ONLY" i Comment) och får exportera en
+ *    sändningsbar rad endast enligt den uttryckliga `mark`-policyn.
+ *  - `must_block_tx`: TX MÅSTE vara spärrad. Endast target som deklarerar
+ *    `verified_tx_inhibit` får serialisera kanalen.
+ */
+export type TxIntent = "normal" | "best_effort_rx_only" | "must_block_tx";
+
 
 export interface FilterSettings {
   statuses: string[];
