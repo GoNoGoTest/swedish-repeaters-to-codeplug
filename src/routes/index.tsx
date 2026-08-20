@@ -1,6 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NormalizedChannel } from "@/lib/codeplug/models";
+import { collectRxOnly, isRxOnlyChannel } from "@/lib/codeplug/rxOnly";
+import { RxOnlyConfirmDialog } from "@/components/codeplug/RxOnlyConfirmDialog";
+
 import { useActiveExportTarget } from "@/hooks/useActiveExportTarget";
 import { loadSk6baCsv, type Sk6baLoadState } from "@/lib/codeplug/importers/sk6ba";
 import { useCodeplugSettings } from "@/hooks/useCodeplugSettings";
@@ -192,6 +195,13 @@ function Index() {
   };
 
   const { exportFiles, exportWarnings } = useCodeplugDownload({ settings, exportChannels });
+
+  // RX-only-kanaler som faktiskt hamnar i filen. Samma predikat används av
+  // statistiken och den passiva bannern.
+  const rxOnlyInExport = useMemo(() => collectRxOnly(exportChannels), [exportChannels]);
+  const [rxOnlyConfirmOpen, setRxOnlyConfirmOpen] = useState(false);
+  const exportButtonRef = useRef<HTMLButtonElement | null>(null);
+
 
   const onFile = useCallback(
     async (file: File) => {
