@@ -3,7 +3,14 @@ import type { z } from "zod";
 import type { Settings } from "@/lib/codeplug/models";
 import { DEFAULT_SETTINGS } from "@/lib/codeplug/defaults";
 
-const STORAGE_KEY = "sk6ba-chirp-settings-v6";
+const STORAGE_KEY = "sk6ba-chirp-settings-v7";
+/**
+ * v6-data kunde innehålla ett `packs.rxOnlyPolicy` som den gamla
+ * targetväxlingsbuggen skrev över med "skip". Vi läser inte v6 alls —
+ * alla startar på DEFAULT_SETTINGS ("Spärra TX i radion") — och städar
+ * bort den döda nyckeln vid första laddningen.
+ */
+const LEGACY_STORAGE_KEYS = ["sk6ba-chirp-settings-v6"];
 
 import { parseModes } from "@/lib/codeplug/modes";
 import { getTarget } from "@/lib/codeplug/targets";
