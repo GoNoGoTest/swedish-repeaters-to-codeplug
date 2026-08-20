@@ -159,9 +159,9 @@ describe("defensiv vakt", () => {
   });
 
   it("no_tx_inhibit-target kan inte serialisera must_block_tx", () => {
-    expect(() =>
-      RT_SYSTEMS_YAESU_TARGET.export([blocked], RT_SYSTEMS_YAESU_DEFAULTS),
-    ).toThrow(TxIntentCapabilityError);
+    expect(() => RT_SYSTEMS_YAESU_TARGET.export([blocked], RT_SYSTEMS_YAESU_DEFAULTS)).toThrow(
+      TxIntentCapabilityError,
+    );
   });
 
   it("verified_tx_inhibit-target passerar vakten", () => {

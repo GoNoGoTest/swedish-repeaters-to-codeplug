@@ -257,7 +257,6 @@ export type NormalizedChannel = ChannelSource &
  */
 export type TxIntent = "normal" | "best_effort_rx_only" | "must_block_tx";
 
-
 export interface FilterSettings {
   statuses: string[];
   types: string[];

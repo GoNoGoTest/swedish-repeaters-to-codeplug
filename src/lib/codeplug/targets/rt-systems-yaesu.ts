@@ -323,15 +323,14 @@ export const RT_SYSTEMS_YAESU_TARGET: ExportTarget<RtSystemsYaesuSettings> = {
   exportMany: (channels: NormalizedChannel[], s: RtSystemsYaesuSettings, split: SplitSettings) => {
     assertTxIntentSerializable(channels, "no_tx_inhibit", "rt-systems-yaesu-generic");
     return {
-    files: buildSplitFiles(channels, split, {
-      filenameBase: "rt-systems-yaesu",
-      extension: "csv",
-      renderChunk: (chunk) => exportRtSystemsYaesuCsv(chunk, s).csv,
-    }),
+      files: buildSplitFiles(channels, split, {
+        filenameBase: "rt-systems-yaesu",
+        extension: "csv",
+        renderChunk: (chunk) => exportRtSystemsYaesuCsv(chunk, s).csv,
+      }),
       warnings: exportRtSystemsYaesuCsv(channels, s).warnings,
     };
   },
-
 };
 
 registerTarget(RT_SYSTEMS_YAESU_TARGET);
