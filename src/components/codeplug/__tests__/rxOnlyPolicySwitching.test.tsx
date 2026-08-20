@@ -170,9 +170,9 @@ describe("targetväxling och RX-only-policy", () => {
   it("selecten visar den effektiva fallbacken men explicit val uppdaterar requested", () => {
     render(<RouteHarness />);
     switchTo("rt-systems-yaesu-generic");
-    const select = screen.getByLabelText(
-      "RX-only-kanaler (t.ex. marin VHF, airband)",
-    ) as HTMLSelectElement;
+    const select = (screen.getAllByRole("combobox") as HTMLSelectElement[]).find((el) =>
+      Array.from(el.options).some((o) => o.value === "block_tx"),
+    )!;
     expect(select.value).toBe("skip");
 
     fireEvent.change(select, { target: { value: "mark" } });
