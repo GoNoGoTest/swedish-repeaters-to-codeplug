@@ -19,7 +19,14 @@ import { RT_SYSTEMS_YAESU_DEFAULTS, RT_SYSTEMS_YAESU_TARGET } from "../targets/r
 
 const base: Settings = {
   ...DEFAULT_SETTINGS,
-  filter: { ...DEFAULT_SETTINGS.filter, statuses: [], countries: [], includeUnknownRegions: true },
+  filter: {
+    ...DEFAULT_SETTINGS.filter,
+    statuses: [],
+    types: [],
+    modes: [],
+    countries: [],
+    includeUnknownRegions: true,
+  },
 };
 
 function withPolicy(p: Settings["packs"]["rxOnlyPolicy"]): Settings {
@@ -167,6 +174,8 @@ describe("defensiv vakt", () => {
     const marked = makeChannel({
       tx_intent: "best_effort_rx_only",
       rx_only: true,
+      duplex: "",
+      offset: 0,
       generated_name_final: "MARIN16",
     });
     const res = RT_SYSTEMS_YAESU_TARGET.export([marked], RT_SYSTEMS_YAESU_DEFAULTS);
