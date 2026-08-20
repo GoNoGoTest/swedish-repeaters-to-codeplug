@@ -78,7 +78,13 @@ function RouteHarness({ initial = DEFAULT_SETTINGS }: { initial?: Settings }) {
         settings={settings}
         setSettings={setSettings}
         hasPacks
-        chirpSettings={{ startLocation: 1, mode: "NFM", tStep: 5.0, skipLinks: false, maxLength: 6 }}
+        chirpSettings={{
+          startLocation: 1,
+          mode: "NFM",
+          tStep: 5.0,
+          skipLinks: false,
+          maxLength: 6,
+        }}
         targetSettings={{}}
         setTargetSettings={() => {}}
         channels={exportChannels}
