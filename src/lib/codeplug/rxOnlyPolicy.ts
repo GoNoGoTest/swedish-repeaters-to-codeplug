@@ -1,4 +1,7 @@
 import type { RxOnlyPolicy, Settings } from "./models";
+// Import via targets/index så registret garanterat är fyllt när resolvern
+// frågar efter ett targets deklarerade TX-spärr-förmåga.
+import { getTarget } from "./targets";
 
 /**
  * Requested vs effektiv RX-only-policy.
@@ -8,13 +11,19 @@ import type { RxOnlyPolicy, Settings } from "./models";
  * Vissa targets kan däremot inte uttrycka alla policyer; för dem härleds en
  * *effektiv* policy som pipelinen och exportrelaterat UI använder.
  *
- * RT Systems Yaesu Generic CSV saknar ett dokumenterat sätt att uttrycka
- * "blockera TX", därför faller `block_tx` tillbaka på `skip` för det targetet
- * (se projektets memory-regel: hitta inte på RX-only-beteende).
+ * Vilka targets som kan uttrycka "blockera TX" avgörs av targetens egen
+ * deklarerade `txInhibit`-capability — inga hårdkodade target-id:n här.
+ * RT Systems Yaesu Generic CSV deklarerar `no_tx_inhibit`, därför faller
+ * `block_tx` tillbaka på `skip` för det targetet (se projektets memory-regel:
+ * hitta inte på RX-only-beteende).
  */
 export function targetSupportsRxOnlyPolicy(targetId: string, policy: RxOnlyPolicy): boolean {
-  if (targetId === "rt-systems-yaesu-generic") return policy !== "block_tx";
-  return true;
+  if (policy !== "block_tx") return true;
+  const target = getTarget(targetId);
+  // Okänt target (t.ex. testdubbel som inte registrerats): var tillåtande —
+  // vakten `assertTxIntentSerializable()` fångar ändå ett riktigt fel.
+  if (!target) return true;
+  return target.txInhibit === "verified_tx_inhibit";
 }
 
 /** Effektiv policy för ett target utan att röra det requested värdet. */
