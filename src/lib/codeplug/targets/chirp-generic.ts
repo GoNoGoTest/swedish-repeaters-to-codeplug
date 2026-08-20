@@ -66,11 +66,14 @@ export const CHIRP_GENERIC_TARGET: ExportTarget<ChirpSettings> = {
   resolveMaxNameLength: (s) => s.maxLength,
   previewMode: (c, s) => resolveChirpMode(c, s.mode),
   validate: (channels) => chirpDigitalWarnings(channels),
-  export: (channels: NormalizedChannel[], settings: ChirpSettings) => ({
-    filename: "chirp.csv",
-    content: exportChirpCsv(channels, settings),
-    warnings: chirpDigitalWarnings(channels),
-  }),
+  export: (channels: NormalizedChannel[], settings: ChirpSettings) => {
+    assertTxIntentSerializable(channels, "verified_tx_inhibit", "chirp-generic");
+    return {
+      filename: "chirp.csv",
+      content: exportChirpCsv(channels, settings),
+      warnings: chirpDigitalWarnings(channels),
+    };
+  },
   exportMany: (channels: NormalizedChannel[], settings: ChirpSettings, split: SplitSettings) => ({
     files: buildSplitFiles(channels, split, {
       filenameBase: "chirp",
