@@ -3,7 +3,7 @@ import type { NormalizedChannel, SplitSettings, Warning } from "../models";
 import { renderCsv, type RowMapper } from "../exporters/shared/rowMapper";
 import { buildSplitFiles } from "./split";
 import type { ExportTarget, HardwareLimits } from "./types";
-import type { TxInhibitCapability } from "../txIntent";
+import { assertTxIntentSerializable, type TxInhibitCapability } from "../txIntent";
 
 /**
  * `defineTarget()` is the canonical entry point for a new CSV-based export
@@ -31,6 +31,7 @@ import type { TxInhibitCapability } from "../txIntent";
  *   limits: IC705_LIMITS,
  *   defaultSettings: IC705_DEFAULTS,
  *   settingsSchema: ic705SettingsSchema,
+ *   txInhibit: "verified_tx_inhibit",
  *   mapper: IC705_ROW_MAPPER,
  *   splitEnabled: true,
  *   resolveMaxNameLength: (s) => s.maxLength,
@@ -80,11 +81,15 @@ export function defineTarget<TSettings, TCols extends string>(
     validate: spec.validate,
     resolveMaxNameLength: spec.resolveMaxNameLength,
     previewMode: spec.previewMode,
-    export: (channels, settings) => ({
-      filename: `${baseFilename}.${spec.fileExtension}`,
-      content: renderCsv(channels, spec.mapper, settings),
-      warnings: spec.validate ? spec.validate(channels, settings) : [],
-    }),
+    export: (channels, settings) => {
+      // Automatisk defensiv vakt: ingen target-författare kan glömma den.
+      assertTxIntentSerializable(channels, spec.txInhibit, spec.id);
+      return {
+        filename: `${baseFilename}.${spec.fileExtension}`,
+        content: renderCsv(channels, spec.mapper, settings),
+        warnings: spec.validate ? spec.validate(channels, settings) : [],
+      };
+    },
   };
 
   if (spec.splitEnabled) {
@@ -92,14 +97,17 @@ export function defineTarget<TSettings, TCols extends string>(
       channels: NormalizedChannel[],
       settings: TSettings,
       split: SplitSettings,
-    ) => ({
-      files: buildSplitFiles(channels, split, {
+    ) => {
+      assertTxIntentSerializable(channels, spec.txInhibit, spec.id);
+      return {
+        files: buildSplitFiles(channels, split, {
         filenameBase: baseFilename,
         extension: spec.fileExtension,
-        renderChunk: (chunk) => renderCsv(chunk, spec.mapper, settings),
-      }),
-      warnings: spec.validate ? spec.validate(channels, settings) : [],
-    });
+          renderChunk: (chunk) => renderCsv(chunk, spec.mapper, settings),
+        }),
+        warnings: spec.validate ? spec.validate(channels, settings) : [],
+      };
+    };
   }
 
   return target;

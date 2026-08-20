@@ -74,7 +74,9 @@ export const CHIRP_GENERIC_TARGET: ExportTarget<ChirpSettings> = {
       warnings: chirpDigitalWarnings(channels),
     };
   },
-  exportMany: (channels: NormalizedChannel[], settings: ChirpSettings, split: SplitSettings) => ({
+  exportMany: (channels: NormalizedChannel[], settings: ChirpSettings, split: SplitSettings) => {
+    assertTxIntentSerializable(channels, "verified_tx_inhibit", "chirp-generic");
+    return {
     files: buildSplitFiles(channels, split, {
       filenameBase: "chirp",
       extension: "csv",
@@ -82,7 +84,8 @@ export const CHIRP_GENERIC_TARGET: ExportTarget<ChirpSettings> = {
       renderChunk: (chunk) => exportChirpCsv(chunk, settings),
     }),
     warnings: chirpDigitalWarnings(channels),
-  }),
+    };
+  },
 };
 
 registerTarget(CHIRP_GENERIC_TARGET);

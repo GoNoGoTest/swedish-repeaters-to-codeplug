@@ -20,9 +20,10 @@ import { getTarget } from "./targets";
 export function targetSupportsRxOnlyPolicy(targetId: string, policy: RxOnlyPolicy): boolean {
   if (policy !== "block_tx") return true;
   const target = getTarget(targetId);
-  // Okänt target (t.ex. testdubbel som inte registrerats): var tillåtande —
-  // vakten `assertTxIntentSerializable()` fångar ändå ett riktigt fel.
-  if (!target) return true;
+  // Fail closed: ett okänt/oregistrerat target har ingen verifierad
+  // TX-spärr-förmåga, så `block_tx` får inte anses stödjas. Effektiv policy
+  // faller då tillbaka på `skip`, vilket är det säkra utfallet.
+  if (!target) return false;
   return target.txInhibit === "verified_tx_inhibit";
 }
 
