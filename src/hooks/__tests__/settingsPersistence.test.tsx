@@ -285,6 +285,27 @@ describe("loadSettingsFromRaw – sektionsisolering", () => {
     expect(s.naming.abbreviations.districtPrefix).toBe("D");
   });
 
+  it("7b. närvarande men icke-objekt abbreviations återställer hela naming, syskonsektion orörd", () => {
+    const s = loadSettingsFromRaw({
+      ...base(),
+      naming: { ...DEFAULT_SETTINGS.naming, components: ["{call}"], abbreviations: "trasigt" },
+      sort: { ...DEFAULT_SETTINGS.sort, geohashPrecision: 4 },
+    });
+    expect(s.naming).toEqual(DEFAULT_SETTINGS.naming);
+    expect(s.sort.geohashPrecision).toBe(4);
+  });
+
+  it("7c. saknad abbreviations fylls från defaults och syskon bevaras", () => {
+    const naming: Record<string, unknown> = {
+      ...DEFAULT_SETTINGS.naming,
+      components: ["{call}"],
+    };
+    delete naming.abbreviations;
+    const s = loadSettingsFromRaw({ ...base(), naming });
+    expect(s.naming.abbreviations).toEqual(DEFAULT_SETTINGS.naming.abbreviations);
+    expect(s.naming.components).toEqual(["{call}"]);
+  });
+
   it("8. trasig split behåller targetId och perTarget", () => {
     const s = loadSettingsFromRaw({
       ...base(),

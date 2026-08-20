@@ -180,9 +180,14 @@ export function loadSettingsFromRaw(raw: unknown): Settings {
         ...DEFAULT_SETTINGS.naming,
         ...namingStored,
         // Shallow — aldrig djup map-merge: type/network/band är användarstyrda.
-        abbreviations: isPlainObject(namingStored.abbreviations)
-          ? { ...DEFAULT_SETTINGS.naming.abbreviations, ...namingStored.abbreviations }
-          : { ...DEFAULT_SETTINGS.naming.abbreviations },
+        // Saknat fält fylls från defaults; närvarande men ogiltigt värde skickas
+        // vidare till schemat så att hela naming-sektionen faller tillbaka.
+        abbreviations:
+          namingStored.abbreviations === undefined
+            ? { ...DEFAULT_SETTINGS.naming.abbreviations }
+            : isPlainObject(namingStored.abbreviations)
+              ? { ...DEFAULT_SETTINGS.naming.abbreviations, ...namingStored.abbreviations }
+              : namingStored.abbreviations,
       }
     : undefined;
   const naming = parseSection(
