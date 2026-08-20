@@ -171,7 +171,7 @@ describe("targetväxling och RX-only-policy", () => {
     render(<RouteHarness />);
     switchTo("rt-systems-yaesu-generic");
     const select = (screen.getAllByRole("combobox") as HTMLSelectElement[]).find((el) =>
-      Array.from(el.options).some((o) => o.value === "block_tx"),
+      Array.from(el.options).some((o) => o.value === "mark"),
     )!;
     expect(select.value).toBe("skip");
 
