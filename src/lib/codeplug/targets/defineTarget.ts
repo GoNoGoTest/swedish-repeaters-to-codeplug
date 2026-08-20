@@ -101,8 +101,8 @@ export function defineTarget<TSettings, TCols extends string>(
       assertTxIntentSerializable(channels, spec.txInhibit, spec.id);
       return {
         files: buildSplitFiles(channels, split, {
-        filenameBase: baseFilename,
-        extension: spec.fileExtension,
+          filenameBase: baseFilename,
+          extension: spec.fileExtension,
           renderChunk: (chunk) => renderCsv(chunk, spec.mapper, settings),
         }),
         warnings: spec.validate ? spec.validate(channels, settings) : [],
