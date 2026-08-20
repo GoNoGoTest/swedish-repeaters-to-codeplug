@@ -9,6 +9,7 @@ import type {
 import { assertNever } from "@/lib/codeplug/assertNever";
 import { type AnyExportTarget, requireTarget, resolveTargetSettings } from "@/lib/codeplug/targets";
 import type { ExportTarget } from "@/lib/codeplug/targets/types";
+import { targetSupportsRxOnlyPolicy } from "@/lib/codeplug/rxOnlyPolicy";
 
 /**
  * Bundle med target-relaterade deriveringar som tidigare låg utspridda i
@@ -58,8 +59,10 @@ const CHIRP_FALLBACK: ChirpSettings = {
   maxLength: 6,
 };
 
-const supportsRxOnlyPolicyAll = (_p: RxOnlyPolicy): boolean => true;
-const supportsRxOnlyPolicyRtSystems = (p: RxOnlyPolicy): boolean => p !== "block_tx";
+const supportsRxOnlyPolicyAll = (p: RxOnlyPolicy): boolean =>
+  targetSupportsRxOnlyPolicy("chirp-generic", p);
+const supportsRxOnlyPolicyRtSystems = (p: RxOnlyPolicy): boolean =>
+  targetSupportsRxOnlyPolicy("rt-systems-yaesu-generic", p);
 
 /**
  * Generisk bundle-byggare: tar ett narrowat `ExportTarget<T>` + dess

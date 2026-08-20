@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { NormalizedChannel } from "@/lib/codeplug/models";
 import { collectRxOnly, isRxOnlyChannel } from "@/lib/codeplug/rxOnly";
+import {
+  resolveEffectiveRxOnlyPolicy,
+  withEffectiveRxOnlyPolicy,
+} from "@/lib/codeplug/rxOnlyPolicy";
 import { RxOnlyConfirmDialog } from "@/components/codeplug/RxOnlyConfirmDialog";
 
 import { useActiveExportTarget } from "@/hooks/useActiveExportTarget";
@@ -83,7 +87,6 @@ function Index() {
     previewMode,
     validate: targetValidate,
     previewStartLocation,
-    supportsRxOnlyPolicy,
     chirpSettings,
   } = useActiveExportTarget(settings);
   // Opaque patch som skickas vidare till ExportPanel (panelen narrowar själv).
@@ -108,17 +111,16 @@ function Index() {
     [setSettings],
   );
 
-  // RX-only-policy: säkerställ att valt värde är giltigt för aktuellt target.
-  // RT-systems-Yaesu stöder inte "block_tx" (vi saknar dokumentation om hur
-  // RT Systems markerar RX-only). Övriga target stöder alla tre val. Vi rör
-  // endast policyn när den är ogiltig — användarens egna val (mark/skip) på
-  // RT-systems lämnas orört.
-  useEffect(() => {
-    if (!supportsRxOnlyPolicy(settings.packs.rxOnlyPolicy)) {
-      setSettings((prev) => ({ ...prev, packs: { ...prev.packs, rxOnlyPolicy: "skip" } }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.export.targetId]);
+  // RX-only-policy: användarens val (requested) ägs av `settings.packs` och
+  // ändras aldrig av ett targetbyte. Targets som inte kan uttrycka valet får
+  // en *effektiv* policy (RT Systems: block_tx → skip) som pipelinen och det
+  // exportrelaterade UI:t använder. Byte tillbaka återställer alltså det
+  // bevarade valet automatiskt.
+  const effectiveRxOnlyPolicy = useMemo(
+    () => resolveEffectiveRxOnlyPolicy(settings.export.targetId, settings.packs.rxOnlyPolicy),
+    [settings.export.targetId, settings.packs.rxOnlyPolicy],
+  );
+  const effectiveSettings = useMemo(() => withEffectiveRxOnlyPolicy(settings), [settings]);
 
   const { packs, selectedChannels, enabledPackCount } = useSelectedPackChannels(settings);
 
@@ -128,7 +130,7 @@ function Index() {
   const pipeline = useCodeplugPipeline({
     rows,
     packChannels: selectedChannels,
-    settings,
+    settings: effectiveSettings,
     maxNameLength,
   });
 
@@ -418,6 +420,7 @@ function Index() {
                   targetSettings={targetSettings}
                   setTargetSettings={setTargetSettings}
                   channels={exportChannels}
+                  effectiveRxOnlyPolicy={effectiveRxOnlyPolicy}
                 />
               </Section>
             )}
@@ -460,12 +463,12 @@ function Index() {
                   <RxOnlyExportNote
                     channels={exportChannels}
                     targetId={settings.export.targetId}
-                    rxOnlyPolicy={settings.packs.rxOnlyPolicy}
+                    rxOnlyPolicy={effectiveRxOnlyPolicy}
                   />
                   <RtSystemsRxOnlySkippedNote
                     sourceHasRxOnly={selectedChannels.some((c) => c.rx_only || !c.tx_allowed)}
                     targetId={settings.export.targetId}
-                    rxOnlyPolicy={settings.packs.rxOnlyPolicy}
+                    rxOnlyPolicy={effectiveRxOnlyPolicy}
                   />
                   <div className="grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-6 text-sm mb-3">
                     <Stat label="Från SK6BA" value={pipeline.sk6baCount} />
@@ -565,7 +568,7 @@ function Index() {
         open={rxOnlyConfirmOpen}
         channels={rxOnlyInExport}
         targetId={settings.export.targetId}
-        rxOnlyPolicy={settings.packs.rxOnlyPolicy}
+        rxOnlyPolicy={effectiveRxOnlyPolicy}
         onCancel={closeRxOnlyConfirm}
         onConfirm={() => {
           closeRxOnlyConfirm();
