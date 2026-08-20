@@ -38,6 +38,27 @@ describe("useCodeplugSettings – persistens och migration", () => {
     expect(result.current.settings).toEqual(DEFAULT_SETTINGS);
   });
 
+  it("gammal v6-data ignoreras helt och nyckeln städas bort", async () => {
+    // v6 kunde innehålla en rxOnlyPolicy som den gamla targetväxlingsbuggen
+    // skrev över med "skip". Den datan får inte längre påverka något.
+    window.localStorage.setItem(
+      "sk6ba-chirp-settings-v6",
+      JSON.stringify({
+        ...baseStored(),
+        packs: { ...DEFAULT_SETTINGS.packs, rxOnlyPolicy: "skip" },
+        export: { ...DEFAULT_SETTINGS.export, targetId: "rt-systems-yaesu-generic" },
+      }),
+    );
+    const result = await loadSettings();
+    expect(result.current.settings.packs.rxOnlyPolicy).toBe("block_tx");
+    expect(result.current.settings.export.targetId).toBe("chirp-generic");
+    expect(window.localStorage.getItem("sk6ba-chirp-settings-v6")).toBeNull();
+  });
+
+  it("defaultpolicyn för RX-only är block_tx", () => {
+    expect(DEFAULT_SETTINGS.packs.rxOnlyPolicy).toBe("block_tx");
+  });
+
   it("migrerar legacy collisionPolicy 'stop' utan att tappa orelaterade fält", async () => {
     const stored = baseStored();
     stored.naming = {
