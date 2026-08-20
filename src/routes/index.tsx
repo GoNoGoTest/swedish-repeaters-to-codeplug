@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { NormalizedChannel } from "@/lib/codeplug/models";
 import { collectRxOnly, isRxOnlyChannel } from "@/lib/codeplug/rxOnly";
+import {
+  resolveEffectiveRxOnlyPolicy,
+  withEffectiveRxOnlyPolicy,
+} from "@/lib/codeplug/rxOnlyPolicy";
 import { RxOnlyConfirmDialog } from "@/components/codeplug/RxOnlyConfirmDialog";
 
 import { useActiveExportTarget } from "@/hooks/useActiveExportTarget";
@@ -83,7 +87,6 @@ function Index() {
     previewMode,
     validate: targetValidate,
     previewStartLocation,
-    supportsRxOnlyPolicy,
     chirpSettings,
   } = useActiveExportTarget(settings);
   // Opaque patch som skickas vidare till ExportPanel (panelen narrowar själv).
@@ -417,6 +420,7 @@ function Index() {
                   targetSettings={targetSettings}
                   setTargetSettings={setTargetSettings}
                   channels={exportChannels}
+                  effectiveRxOnlyPolicy={effectiveRxOnlyPolicy}
                 />
               </Section>
             )}
@@ -459,12 +463,12 @@ function Index() {
                   <RxOnlyExportNote
                     channels={exportChannels}
                     targetId={settings.export.targetId}
-                    rxOnlyPolicy={settings.packs.rxOnlyPolicy}
+                    rxOnlyPolicy={effectiveRxOnlyPolicy}
                   />
                   <RtSystemsRxOnlySkippedNote
                     sourceHasRxOnly={selectedChannels.some((c) => c.rx_only || !c.tx_allowed)}
                     targetId={settings.export.targetId}
-                    rxOnlyPolicy={settings.packs.rxOnlyPolicy}
+                    rxOnlyPolicy={effectiveRxOnlyPolicy}
                   />
                   <div className="grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-6 text-sm mb-3">
                     <Stat label="Från SK6BA" value={pipeline.sk6baCount} />
@@ -564,7 +568,7 @@ function Index() {
         open={rxOnlyConfirmOpen}
         channels={rxOnlyInExport}
         targetId={settings.export.targetId}
-        rxOnlyPolicy={settings.packs.rxOnlyPolicy}
+        rxOnlyPolicy={effectiveRxOnlyPolicy}
         onCancel={closeRxOnlyConfirm}
         onConfirm={() => {
           closeRxOnlyConfirm();

@@ -502,6 +502,7 @@ export function ExportPanel({
   targetSettings,
   setTargetSettings,
   channels = [],
+  effectiveRxOnlyPolicy,
 }: {
   settings: Settings;
   setSettings: (s: Settings) => void;
@@ -510,6 +511,8 @@ export function ExportPanel({
   targetSettings: Record<string, unknown>;
   setTargetSettings: (patch: Record<string, unknown>) => void;
   channels?: NormalizedChannel[];
+  /** Effektiv RX-only-policy för aktivt target (kan skilja sig från requested). */
+  effectiveRxOnlyPolicy: RxOnlyPolicy;
 }) {
   const updPacks = (patch: Partial<Settings["packs"]>) =>
     setSettings({ ...settings, packs: { ...settings.packs, ...patch } });
@@ -565,7 +568,7 @@ export function ExportPanel({
             </Field>
             <Field label="RX-only-kanaler (t.ex. marin VHF, airband)">
               <select
-                value={settings.packs.rxOnlyPolicy}
+                value={effectiveRxOnlyPolicy}
                 onChange={(e) => updPacks({ rxOnlyPolicy: e.target.value as RxOnlyPolicy })}
                 className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
               >
@@ -585,7 +588,7 @@ export function ExportPanel({
           <RxOnlyExportNote
             channels={channels}
             targetId={settings.export.targetId}
-            rxOnlyPolicy={settings.packs.rxOnlyPolicy}
+            rxOnlyPolicy={effectiveRxOnlyPolicy}
           />
         </div>
       )}
