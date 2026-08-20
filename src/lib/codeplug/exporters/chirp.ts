@@ -115,6 +115,11 @@ function resolveTStep(c: NormalizedChannel, fallback: number): number {
 }
 
 function resolveDuplexAndOffset(c: NormalizedChannel): { duplex: string; offset: string } {
+  // TX-kontraktet vinner över frekvensdata: en must_block_tx-kanal skrivs
+  // alltid som Duplex=off, även om raden bär en explicit tx_frequency.
+  if (c.tx_intent === "must_block_tx") {
+    return { duplex: "off", offset: c.offset.toFixed(6) };
+  }
   if (c.duplex === "split" && c.tx_frequency != null) {
     return { duplex: "split", offset: c.tx_frequency.toFixed(6) };
   }

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ChirpSettings, NormalizedChannel, SplitSettings } from "../models";
 import { exportChirpCsv, chirpDigitalWarnings, resolveChirpMode } from "../exporters/chirp";
 import { registerTarget } from "./registry";
+import { assertTxIntentSerializable } from "../txIntent";
 import { buildSplitFiles } from "./split";
 import type { ExportTarget, HardwareLimits } from "./types";
 

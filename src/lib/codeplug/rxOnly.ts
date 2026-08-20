@@ -1,4 +1,5 @@
 import type { NormalizedChannel } from "./models";
+import { hasRxOnlySourceFlags } from "./txIntent";
 
 /**
  * Enda källan till sanning för "är den här kanalen avsedd endast för
@@ -14,7 +15,7 @@ import type { NormalizedChannel } from "./models";
  * exporter — targets äger fortfarande sin egen serialisering.
  */
 export function isRxOnlyChannel(c: NormalizedChannel): boolean {
-  return c.rx_only || !c.tx_allowed || c.duplex === "off";
+  return c.tx_intent !== "normal" || hasRxOnlySourceFlags(c);
 }
 
 /** Alla RX-only-kanaler i den faktiska exportlistan, i exportordning. */
